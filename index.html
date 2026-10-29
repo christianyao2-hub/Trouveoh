@@ -1,147 +1,286 @@
-<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Trouvéoh</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <style>
-:root{--vert:#0f5b3e;--orange:#f28c1b;--fond:#f5f7f3;--encre:#14211b;--gris:#5d6b63;--ligne:#d9e0da}
-*{box-sizing:border-box}
-body{margin:0;background:var(--fond);color:var(--encre);font:16px/1.5 "Avenir Next","Segoe UI",system-ui,sans-serif}
-header{background:var(--vert);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-header h1{margin:0;font-size:22px}
-main{max-width:640px;margin:0 auto;padding:16px}
-button{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--orange);color:#14211b;font-weight:600}
-button.sec{background:transparent;color:#fff;border:1px solid #ffffff88}
-form{background:#fff;border:1px solid var(--ligne);border-radius:14px;padding:14px;display:grid;gap:10px;margin-bottom:20px}
-input,select,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--ligne);border-radius:8px;background:#fff}
-.annonce{background:#fff;border:1px solid var(--ligne);border-left:6px solid var(--vert);border-radius:12px;padding:12px 14px;margin-bottom:10px}
-.annonce.perdu{border-left-color:var(--orange)}
-.annonce h3{margin:0 0 4px;font-size:17px}
-.meta{color:var(--gris);font-size:14px}
-.vide{color:var(--gris);text-align:center;padding:24px 0}
-[hidden]{display:none!important}
-</style>
-</head>
-<body>
-<header>
-  <h1>Trouvéoh</h1>
-  <div>
-    <button id="btn-login">Se connecter avec Google</button>
-    <span id="user" hidden></span>
-    <button id="btn-logout" class="sec" hidden>Se déconnecter</button>
-  </div>
-</header>
-
-<main>
-  <form id="form" hidden>
-    <select id="type" required>
-      <option value="perdu">J’ai perdu un objet</option>
-      <option value="trouve">J’ai trouvé un objet</option>
-    </select>
-    <input id="titre" placeholder="Objet (ex. : clés, téléphone)" maxlength="80" required>
-    <input id="lieu" placeholder="Lieu (ex. : marché de Cocody)" maxlength="80" required>
-    <textarea id="description" rows="3" placeholder="Description" maxlength="300"></textarea>
-    <button type="submit">Publier l’annonce</button>
-  </form>
-
-  <section id="liste"><p class="vide">Connecte-toi pour voir les annonces.</p></section>
-  <p id="erreur" class="meta" role="alert"></p>
-</main>
-
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const app = initializeApp({
-  apiKey: "AIzaSyCirlL0kS2QEC6hz3BC1p8q9oMNE4diog4",
-  authDomain: "trouveoh.firebaseapp.com",
-  databaseURL: "https://trouveoh-default-rtdb.firebaseio.com",
-  projectId: "trouveoh",
-  storageBucket: "trouveoh.firebasestorage.app",
-  messagingSenderId: "277694685466",
-  appId: "1:277694685466:web:287b2057bb9fd7f6b04ca3",
-  measurementId: "G-EXLJKD7PG4"
-});
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-const $ = id => document.getElementById(id);
-const erreur = msg => { $("erreur").textContent = msg || ""; };
-let stopEcoute = null;
-
-$("btn-login").onclick = async () => {
-  erreur();
-  const provider = new GoogleAuthProvider();
-  try { await signInWithPopup(auth, provider); }
-  catch (e) {
-    if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") {
-      await signInWithRedirect(auth, provider);
-    } else if (e.code !== "auth/popup-closed-by-user") {
-      erreur("Connexion impossible : " + e.code);
-    }
-  }
-};
-getRedirectResult(auth).catch(e => erreur("Connexion impossible : " + e.code));
-$("btn-logout").onclick = () => signOut(auth);
-
-onAuthStateChanged(auth, user => {
-  const connecte = !!user;
-  $("btn-login").hidden = connecte;
-  $("btn-logout").hidden = !connecte;
-  $("form").hidden = !connecte;
-  $("user").hidden = !connecte;
-  $("user").textContent = connecte ? (user.displayName || user.email) + " " : "";
-  if (stopEcoute) { stopEcoute(); stopEcoute = null; }
-  if (connecte) ecouterAnnonces();
-  else $("liste").innerHTML = '<p class="vide">Connecte-toi pour voir les annonces.</p>';
-});
-
-function ecouterAnnonces() {
-  const q = query(collection(db, "objets"), orderBy("date", "desc"), limit(50));
-  stopEcoute = onSnapshot(q, snap => {
-    const liste = $("liste");
-    liste.innerHTML = "";
-    if (snap.empty) { liste.innerHTML = '<p class="vide">Aucune annonce pour le moment. Publie la première.</p>'; return; }
-    snap.forEach(d => {
-      const a = d.data();
-      const el = document.createElement("article");
-      el.className = "annonce " + a.type;
-      const h = document.createElement("h3");
-      h.textContent = (a.type === "perdu" ? "Perdu : " : "Trouvé : ") + a.titre;
-      const m = document.createElement("div");
-      m.className = "meta";
-      m.textContent = a.lieu + " · par " + a.auteur;
-      const p = document.createElement("p");
-      p.textContent = a.description || "";
-      el.append(h, m, p);
-      liste.append(el);
-    });
-  }, e => erreur("Lecture impossible : " + e.code));
+:root{--bg:#f6f8fb;--card:#fff;--tx:#14213d;--mut:#6b7690;--pri:#f97316;--lost:#e11d48;--found:#059669;--bd:#e5e9f2;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1524;--card:#18223a;--tx:#eef2fb;--mut:#97a3bf;--bd:#28334f}}
+:root[data-theme="dark"]{--bg:#0f1524;--card:#18223a;--tx:#eef2fb;--mut:#97a3bf;--bd:#28334f}
+*{box-sizing:border-box;margin:0}html,body{height:100%}
+body{background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{max-width:520px;margin:0 auto;height:100%;display:flex;flex-direction:column}
+header{padding:14px 18px;font-weight:800;font-size:21px;color:var(--pri)}
+#main{flex:1;overflow-y:auto;padding:0 16px 16px}
+nav{display:flex;background:var(--card);border-top:1px solid var(--bd)}
+nav button{flex:1;background:none;border:0;padding:9px 0 8px;color:var(--mut);font-size:11px;cursor:pointer}
+nav button b{display:block;font-size:20px;font-weight:400}nav button.on{color:var(--pri);font-weight:700}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin-bottom:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:99px;color:#fff;margin-right:4px}
+.lost{background:var(--lost)}.found{background:var(--found)}.st{background:var(--mut)}.event{background:#7c3aed}.info{background:#0284c7}
+.btn{background:var(--pri);color:#fff;border:0;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;cursor:pointer;width:100%}
+.btn.sec{background:transparent;color:var(--pri);border:1px solid var(--pri)}.btn.sm{width:auto;padding:8px 14px;font-size:14px}.btn.red{background:var(--lost)}
+input,textarea,select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font:inherit;margin:4px 0 10px}
+label{font-size:13px;color:var(--mut);font-weight:600}.mut{color:var(--mut);font-size:13px}
+.row{display:flex;gap:8px;align-items:center}.chips{display:flex;gap:8px;margin:4px 0 12px}
+.chip{padding:7px 14px;border-radius:99px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer;font-size:14px}
+.chip.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tile{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:18px 8px;text-align:center;cursor:pointer;font-weight:600}
+.tile b{display:block;font-size:30px;font-weight:400;margin-bottom:4px}
+.msg{max-width:80%;padding:9px 13px;border-radius:16px;margin:6px 0;background:var(--card);border:1px solid var(--bd);font-size:15px}
+.msg.me{background:var(--pri);color:#fff;margin-left:auto;border-color:var(--pri)}
+.av{width:84px;height:84px;border-radius:50%;background:var(--bd);display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 10px;overflow:hidden}.av img{width:100%;height:100%;object-fit:cover}
+.login{text-align:center;padding:50px 20px}.login h1{font-size:38px;color:var(--pri);margin-bottom:6px}
+.back{background:none;border:0;color:var(--pri);font-size:15px;cursor:pointer;padding:4px 0 12px;font-weight:600}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:99px;font-size:14px;z-index:9}
+.thumb{width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin-bottom:8px}
+.fav{float:right;background:none;border:0;font-size:22px;cursor:pointer;color:var(--lost)}
+.banner{background:var(--card);border:1px dashed var(--pri);border-radius:12px;padding:10px;margin-bottom:12px;font-size:14px}
+svg text{fill:var(--mut);font-size:9px}
+</style></head>
+<body><div id="app"><header>📍 Trouvéoh</header><div id="main"></div><nav id="nav"></nav></div>
+<script>
+var $=function(i){return document.getElementById(i)},db,uid,me,pdoc,boot=Date.now(),tab=0,cur=null,fail=0,pos=null,pimg="",pt="",q="",flt="all",vil="",rad=5,onDel=function(){location.reload()};
+var S={items:[],dir:{},msgs:[],ph:[],ev:[],sv:[],inf:[],cm:[],r1:0,r2:0,pr:{favs:[],blocked:[],ville:"",pts:0,scores:{},md:"",mk:[]}};
+var NAV=[["🏠","Accueil"],["➕","Publier"],["🗺️","Carte"],["💬","Messages"],["🎮","Jeux"],["👤","Profil"]];
+var CATS=["Téléphone","Portefeuille","Clés","Documents","Sac","Vêtement","Autre"],ST={open:"Ouvert",search:"En recherche",returned:"Restitué"};
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function nm(id){var d=S.dir[id];return d&&d.name?d.name:"Utilisateur"}
+function toast(t){var d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove()},2600)}
+function sp(){if(pdoc)pdoc.set(S.pr).catch(function(){})}
+function need(){if(uid)return 1;toast("Connectez-vous pour continuer");return 0}
+function notify(t){toast(t);try{if(window.Notification&&Notification.permission=="granted")new Notification("Trouvéoh",{body:t})}catch(e){}}
+function dist(a,b,c,d){var r=Math.PI/180,x=(c-a)*r,y=(d-b)*r*Math.cos((a+c)*r/2);return Math.sqrt(x*x+y*y)*6371}
+function ov(a,b){var w=(a.title+" "+a.cat+" "+a.ville).toLowerCase().split(/\W+/).filter(function(x){return x.length>3}),t=(b.title+" "+b.cat+" "+b.ville).toLowerCase();return w.some(function(x){return t.indexOf(x)>=0})}
+function sim(i){var r=S.items.filter(function(o){return o.id!=i.id&&o.type!=i.type&&o.st!="returned"&&ov(i,o)});return r.length?'<div class="card"><b>🔎 Annonces qui pourraient correspondre</b><p class="mut">À confirmer vous-même avec l’autre personne.</p>'+r.map(function(o){return '<p style="margin-top:6px;cursor:pointer;color:var(--pri)" onclick="cur=\''+o.id+'\';draw()">'+(o.type=="lost"?"Perdu":"Trouvé")+' : '+esc(o.title)+' · '+esc(o.ville)+'</p>'}).join("")+'</div>':""}
+function shrink(f,max,cb){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var s=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*s;c.height=im.height*s;c.getContext("2d").drawImage(im,0,0,c.width,c.height);cb(c.toDataURL("image/jpeg",.7))};im.src=r.result};r.readAsDataURL(f)}
+function locate(cb){if(!navigator.geolocation){toast("GPS indisponible : saisissez votre ville.");return}navigator.geolocation.getCurrentPosition(function(p){pos={lat:p.coords.latitude,lng:p.coords.longitude};cb&&cb()},function(){toast("Position refusée : saisissez votre ville.")},{timeout:10000})}
+function ref(){if(typeof ed!="undefined"&&ed&&cur!==null)return;var a=document.activeElement,id=a&&a.id,v=a&&a.value;draw();if(id){var e=$(id);if(e&&v!==undefined){e.value=v;e.focus()}}}
+function go(i){tab=i;cur=null;px="";draw()}
+function theme(){var t;try{t=localStorage.getItem("tv")||"auto"}catch(e){t="auto"}t=t=="auto"?"light":t=="light"?"dark":"auto";try{localStorage.setItem("tv",t)}catch(e){}applyTheme();draw()}
+function applyTheme(){var t;try{t=localStorage.getItem("tv")}catch(e){}var r=document.documentElement;if(t=="light"||t=="dark")r.setAttribute("data-theme",t);else r.removeAttribute("data-theme")}
+function draw(){
+ var m=$("main"),n=$("nav");applyTheme();
+ if(fail){n.style.display="none";m.innerHTML='<div class="login"><h1>Trouvéoh</h1><p class="mut">Connexion impossible ou accès refusé. Vérifiez votre connexion et vos droits d’accès.</p></div>';return}
+ if(!db||!S.r1||(uid&&!S.r2)){n.style.display="none";m.innerHTML='<div class="login"><h1>Trouvéoh</h1><p class="mut">Chargement…</p></div>';return}
+ if(uid&&!S.dir[uid]){n.style.display="none";m.innerHTML='<div class="login"><h1>Bienvenue</h1><p class="mut" style="margin-bottom:20px">Choisissez le nom affiché aux autres.</p><div class="card" style="text-align:left"><label>Nom</label><input id="on" value="'+esc(me&&me.name||"")+'"><label>Ville</label><input id="ov" placeholder="Ex. : Abidjan"><button class="btn" onclick="onb()">Commencer</button></div></div>';return}
+ n.style.display="flex";
+ n.innerHTML=NAV.map(function(x,i){return '<button class="'+(i==tab?"on":"")+'" onclick="go('+i+')"><b>'+x[0]+'</b>'+x[1]+'</button>'}).join("");
+ var b=!uid&&typeof gsign=="function"?'<div class="banner">Mode invité : lecture seule. <a href="#" onclick="gsign();return false" style="color:var(--pri);font-weight:700">Se connecter avec Google</a></div>':"";
+ [home,pub,map,msgs,jeux,prof][tab](m);if(b&&tab<4&&cur===null)m.insertAdjacentHTML("afterbegin",b);
 }
-
-$("form").onsubmit = async ev => {
-  ev.preventDefault();
-  erreur();
-  const u = auth.currentUser;
-  if (!u) return;
-  try {
-    await addDoc(collection(db, "objets"), {
-      type: $("type").value,
-      titre: $("titre").value.trim(),
-      lieu: $("lieu").value.trim(),
-      description: $("description").value.trim(),
-      auteur: u.displayName || "Anonyme",
-      uid: u.uid,
-      date: serverTimestamp()
-    });
-    ev.target.reset();
-  } catch (e) { erreur("Publication impossible : " + e.code); }
-};
-</script>
-</body>
-</html>
-
+function onb(){var v=$("on").value.trim();if(!v){toast("Entrez un nom.");return}S.pr.ville=$("ov").value.trim();sp();var o={name:v,photo:"",ville:S.pr.ville};db.doc("directory/"+uid).set(o).then(function(){S.dir[uid]=o;S.r1=1;ref()},function(e){toast("Enregistrement impossible : "+((e&&e.message)||e))})}
+var TN={lost:"Perdu",found:"Trouvé",event:"Événement",info:"Renseignement"},HF=[["all","Tous"],["found","Trouvés"],["lost","Perdus"],["event","Events"],["info","Renseignements"]],ed=0;
+function allp(){var b=S.pr.blocked;return S.items.map(function(i){return Object.assign({},i,{_c:"items"})}).concat(S.ev.map(function(e){return Object.assign({},e,{_c:"events",type:"event"})})).concat(S.inf.map(function(e){return Object.assign({},e,{_c:"infos",type:"info"})})).filter(function(x){return b.indexOf(x.aid)<0}).sort(function(a,c){return sps(c)-sps(a)||(c.ts||0)-(a.ts||0)})}
+function card(i){var f=S.pr.favs.indexOf(i.id)>=0,n=S.cm.filter(function(c){return c.iid==i.id}).length,it=!i._c||i._c=="items";return '<div class="card" onclick="cur=\''+i.id+'\';ed=0;draw()" style="cursor:pointer"><button class="fav" onclick="event.stopPropagation();fv(\''+i.id+'\')">'+(f?"♥":"♡")+'</button>'+(i.img?'<img class="thumb" src="'+i.img+'">':"")+(sps(i)?'<span class="tag found">⭐ Sponsorisé</span>':"")+'<span class="tag '+i.type+'">'+TN[i.type]+'</span>'+(it?'<span class="tag st">'+ST[i.st||"open"]+'</span>':"")+'<h3 style="margin:8px 0 2px">'+esc(i.title)+'</h3><p class="mut">'+esc(i.cat||"")+' · 📍 '+esc(i.ville||"")+(i.date?" · "+esc(i.date):"")+(pos&&i.lat?" · "+dist(pos.lat,pos.lng,i.lat,i.lng).toFixed(1)+" km":"")+' · 💬 '+n+'</p>'+(it?"":'<p style="margin-top:4px">'+esc((i.desc||"").slice(0,90))+'</p>')+'</div>'}
+function fv(id){if(!need())return;var k=S.pr.favs.indexOf(id);if(k<0)S.pr.favs.push(id);else S.pr.favs.splice(k,1);sp();draw()}
+function vis(){return S.items.filter(function(i){return S.pr.blocked.indexOf(i.aid)<0})}
+function hist(){try{return JSON.parse(localStorage.getItem("tvh"))||[]}catch(e){return[]}}
+function setVil(v){v=(v||"").trim();vil=v;if(v){var h=hist().filter(function(x){return x.toLowerCase()!=v.toLowerCase()});h.unshift(v);try{localStorage.setItem("tvh",JSON.stringify(h.slice(0,5)))}catch(e){}}draw()}
+function home(m){
+ if(cur!==null)return detail(m);
+ var l=allp().filter(function(i){var t=(i.title+" "+i.desc+" "+i.cat+" "+i.ville).toLowerCase();return(flt=="all"||i.type==flt)&&(!vil||(i.ville||"").toLowerCase().indexOf(vil.toLowerCase())>=0)&&(!q||qm(t))});
+ m.innerHTML='<input id="sq" placeholder="🔍 Rechercher : portefeuille noir, concert…" value="'+esc(q)+'" oninput="q=this.value;clearTimeout(window.tq);window.tq=setTimeout(ref,300)" style="margin-top:0"><div class="row"><input id="vq" placeholder="🏙️ Ville…" value="'+esc(vil)+'" style="margin:0" onkeydown="if(event.key==\'Enter\')setVil(this.value)"><button class="btn sm" onclick="setVil($(\'vq\').value)">OK</button></div><div class="chips" style="overflow-x:auto;margin:8px 0 0">'+(vil?'<button class="chip on" style="flex:none" onclick="setVil(\'\')">✕ '+esc(vil)+'</button>':"")+hist().map(function(h){return '<button class="chip" style="flex:none;white-space:nowrap" data-v="'+esc(h)+'" onclick="setVil(this.dataset.v)">🕘 '+esc(h)+'</button>'}).join("")+'</div><div class="chips" style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin:6px 0 8px;overflow-x:auto;box-shadow:0 3px 6px -4px rgba(0,0,0,.25)">'+HF.map(function(c){return '<button class="chip '+(flt==c[0]?"on":"")+'" style="flex:none" onclick="flt=\''+c[0]+'\';draw()">'+c[1]+'</button>'}).join("")+'</div>'+(l.length?l.map(card).join(""):'<div class="card" style="text-align:center"><p>Rien à afficher pour le moment.</p><p class="mut">Publiez avec l’onglet ➕.</p></div>')}
+function detail(m){
+ var i=allp().filter(function(x){return x.id==cur})[0];if(!i){cur=null;return home(m)}
+ var mine=i.aid==uid,it=i._c=="items",ev=i.type=="event",mp=i.lat?"https://www.google.com/maps?q="+i.lat+","+i.lng:"https://www.google.com/maps/search/"+encodeURIComponent(i.ville||""),cs=S.cm.filter(function(c){return c.iid==i.id}).sort(function(a,b){return a.ts-b.ts}),hd='<button class="back" onclick="cur=null;ed=0;draw()">← Retour</button>';
+ if(mine&&ed){m.innerHTML=hd+'<div class="card"><label>Titre</label><input id="et" maxlength="80" value="'+esc(i.title)+'"><label>Description</label><textarea id="etd" rows="4" maxlength="500">'+esc(i.desc||"")+'</textarea><label>Ville</label><input id="evl" value="'+esc(i.ville||"")+'">'+(ev?'<label>Date</label><input id="edt" type="date" value="'+esc(i.date||"")+'">':"")+'<div class="row"><button class="btn" onclick="saveE(\''+i._c+'\',\''+i.id+'\')">Enregistrer</button><button class="btn sec" onclick="ed=0;draw()">Annuler</button></div></div>';return}
+ m.innerHTML=hd+'<div class="card">'+(sps(i)?'<span class="tag found">⭐ Sponsorisé</span>':"")+'<span class="tag '+i.type+'">'+TN[i.type]+'</span>'+(it?'<span class="tag st">'+ST[i.st||"open"]+'</span>':"")+'<h2 style="margin:8px 0">'+esc(i.title)+'</h2>'+(i.img?'<img class="thumb" src="'+i.img+'">':"")+'<p>'+esc(i.desc||"")+'</p><p class="mut" style="margin:8px 0">'+esc(i.cat||"")+' · 📍 '+esc(i.ville||"")+(it?" (position approximative)":"")+(i.date?" · "+esc(i.date):"")+' · par '+esc(nm(i.aid))+'</p><div class="row"><a href="'+mp+'" target="_blank" rel="noopener" style="flex:1"><button class="btn sec sm" style="width:100%">🗺️ Carte</button></a>'+(i.tel?'<a href="tel:'+esc(i.tel)+'" style="flex:1"><button class="btn sec sm" style="width:100%">📞 Appeler</button></a>':"")+(mine||!i.aid?"":'<button class="btn sm" style="flex:1" onclick="openPM(\''+i.aid+'\')">✉️ Contacter</button>')+'</div></div>'+
+ (mine?'<div class="card">'+(it?'<label>Statut de l’annonce</label><select onchange="setSt(\''+i.id+'\',this.value)">'+Object.keys(ST).map(function(k){return '<option value="'+k+'"'+((i.st||"open")==k?" selected":"")+'>'+ST[k]+'</option>'}).join("")+'</select>':"")+'<div class="row" style="margin-top:8px"><button class="btn sec sm" onclick="ed=1;draw()">✏️ Modifier</button><button class="btn red sm" onclick="delItem(\''+i._c+'\',\''+i.id+'\')">Supprimer</button></div></div>':'<p class="mut" style="margin-bottom:10px">Seul l’auteur peut modifier cette annonce. Vous pouvez la commenter.</p><button class="btn sec sm" onclick="report(\''+i.id+'\')">🚩 Signaler</button>')+
+ (it?'<div class="card mut" style="margin-top:12px">🔒 Remise d’objet : rencontrez-vous dans un lieu public et fréquenté, de jour, et faites décrire un détail non publié de l’objet.</div>'+sim(i):"")+
+ '<h3 style="margin:14px 0 6px">💬 Commentaires ('+cs.length+')</h3>'+(cs.length?cs.map(function(c){return '<div class="msg'+(c.aid==uid?" me":"")+'"><small style="display:block;font-size:11px;opacity:.7">'+esc(nm(c.aid))+'</small>'+esc(c.t)+(c.aid==uid?' <span style="cursor:pointer" onclick="delC(\''+c.id+'\')">🗑️</span>':"")+'</div>'}).join(""):'<p class="mut">Aucun commentaire.</p>')+(uid?'<div class="row" style="margin-top:10px"><input id="cm" placeholder="Votre commentaire…" style="margin:0"><button class="btn sm" onclick="addC(\''+i.id+'\')">Envoyer</button></div>':'<p class="mut" style="margin-top:8px">Connectez-vous pour commenter.</p>')}
+function saveE(c,id){var t=$("et").value.trim();if(!t){toast("Titre obligatoire");return}var u={title:t,desc:$("etd").value.trim(),ville:$("evl").value.trim()};if($("edt"))u.date=$("edt").value;db.doc(c+"/"+id).update(u).then(function(){toast("Modifié ✓");ed=0;draw()},function(){toast("Modification impossible")})}
+function addC(id){var t=$("cm").value.trim();if(!t||!need())return;$("cm").value="";db.collection("comments").add({iid:id,aid:uid,t:t.slice(0,500),ts:Date.now()}).catch(function(){toast("Commentaire impossible")})}
+function delC(id){db.doc("comments/"+id).delete()}
+function setSt(id,v){db.doc("items/"+id).update({st:v});if(v=="returned")addPts(20,"objet restitué")}
+function delItem(c,id){if(confirm("Supprimer cette annonce ?")){db.doc(c+"/"+id).delete();cur=null}}
+function report(id){if(!need())return;var r=prompt("Motif du signalement ?");if(!r)return;db.collection("reports").add({iid:id,aid:uid,reason:r.slice(0,300),ts:Date.now()}).then(function(){toast("Merci, signalement envoyé")})}
+function pub(m){
+ if(!uid){m.innerHTML='<div class="card" style="text-align:center"><p>Connectez-vous pour publier une annonce.</p>'+(typeof gsign=="function"?'<button class="btn" style="margin-top:12px" onclick="gsign()">Continuer avec Google</button>':"")+'</div>';return}
+ if(!pt){m.innerHTML='<h2 style="margin:6px 0 14px">Que voulez-vous publier ?</h2><div class="grid"><div class="tile" onclick="pt=\'lost\';draw()"><b>😟</b>J’ai perdu un objet</div><div class="tile" onclick="pt=\'found\';draw()"><b>🎉</b>J’ai trouvé un objet</div><div class="tile" onclick="pt=\'event\';draw()"><b>🎟️</b>Publier un événement</div><div class="tile" onclick="pt=\'info\';draw()"><b>ℹ️</b>Renseignement</div></div>';return}
+ if(pt=="event"||pt=="info")return pubX(m);
+ m.innerHTML='<button class="back" onclick="pt=\'\';draw()">← Changer</button><div class="card"><span class="tag '+pt+'">'+(pt=="lost"?"Objet perdu":"Objet trouvé")+'</span><div style="height:10px"></div><label>Titre</label><input id="pt" maxlength="80" placeholder="Ex. : Portefeuille noir"><label>Catégorie</label><select id="pc">'+CATS.map(function(c){return '<option>'+c+'</option>'}).join("")+'</select><label>Description</label><textarea id="pds" rows="3" maxlength="500" placeholder="Signes distinctifs (gardez un détail secret)…"></textarea><label>Ville</label><input id="pv" value="'+esc(S.pr.ville||"")+'" placeholder="Ex. : Abidjan"><label>Photo (facultatif)</label><input type="file" accept="image/*" onchange="var e=this.files[0];if(e)shrink(e,500,function(d){pimg=d})"><button class="btn sec sm" style="margin-bottom:8px" onclick="locate(function(){toast(\'Position approximative enregistrée\')})">📡 Ajouter ma position approximative</button><p class="mut" style="margin-bottom:10px">Votre position est arrondie (environ 1 km) et jamais exacte.</p><button class="btn" onclick="post()">Publier</button></div>';
+}
+function post(){var t=$("pt").value.trim(),v=$("pv").value.trim();if(!t||!v){toast("Titre et ville obligatoires");return}
+ var r=function(x){return Math.round(x*100)/100};
+ db.collection("items").add({type:pt,title:t,cat:$("pc").value,desc:$("pds").value.trim(),ville:v,img:pimg,lat:pos?r(pos.lat):0,lng:pos?r(pos.lng):0,date:new Date().toISOString().slice(0,10),aid:uid,st:"open",ts:Date.now()}).then(function(){toast("Annonce publiée ✓")},function(){toast("Publication impossible : droits insuffisants")});
+ S.pr.ville=v;sp();addPts(10,"publication");mis("pub");pimg="";pt="";tab=0;draw()}
+function map(m){
+ var R=rad,W=300,pins="";
+ if(pos){pins=vis().filter(function(i){return i.lat&&i.st!="returned"}).map(function(i){var dx=(i.lng-pos.lng)*Math.cos(pos.lat*Math.PI/180)*111.3,dy=(i.lat-pos.lat)*111.3;if(Math.sqrt(dx*dx+dy*dy)>R)return "";return '<circle cx="'+(150+dx/R*130)+'" cy="'+(150-dy/R*130)+'" r="7" fill="'+(i.type=="lost"?"#e11d48":"#059669")+'" onclick="cur=\''+i.id+'\';tab=0;draw()" style="cursor:pointer"/>'}).join("")}
+ var pl=S.ph.filter(function(p){return!vil||p.ville==vil});
+ m.innerHTML='<h2 style="margin:6px 0 8px">Lieux autour de moi</h2>'+lg()+'<h3 style="margin:14px 0 8px">Annonces proches</h3>'+(pos?'<div class="row" style="margin-bottom:8px"><select style="margin:0" onchange="rad=+this.value;draw()">'+[1,5,20].map(function(k){return '<option value="'+k+'"'+(rad==k?" selected":"")+'>Rayon '+k+' km</option>'}).join("")+'</select></div><div class="card"><svg viewBox="0 0 300 300" width="100%"><circle cx="150" cy="150" r="130" fill="none" stroke="var(--bd)"/><circle cx="150" cy="150" r="65" fill="none" stroke="var(--bd)"/><text x="154" y="88">'+(R/2)+' km</text><text x="154" y="22">'+R+' km</text><circle cx="150" cy="150" r="6" fill="var(--pri)"/>'+pins+'</svg><p class="mut">🔴 perdu · 🟢 trouvé · 🟠 vous. Touchez un point pour ouvrir l’annonce.</p></div>':'<div class="card" style="text-align:center"><p class="mut" style="margin-bottom:10px">Activez la position pour voir les annonces proches. Sinon, filtrez par ville dans l’accueil.</p><button class="btn" onclick="locate(draw)">📡 Activer ma position</button></div>')+
+ '<h3 style="margin:14px 0 8px">💊 Pharmacies de garde</h3>'+(pl.length?pl.map(function(p){return '<div class="card"><b>'+esc(p.name)+'</b><p class="mut">'+esc(p.addr)+' · '+esc(p.ville)+'</p><p>Garde : '+esc(p.garde)+'</p><p class="mut">Vérifié le '+esc(p.verified)+'</p><div class="row" style="margin-top:8px"><a href="tel:'+esc(p.tel)+'" style="flex:1"><button class="btn sm" style="width:100%">📞 Appeler</button></a><a href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(p.name+" "+p.addr+" "+p.ville)+'" target="_blank" rel="noopener" style="flex:1"><button class="btn sec sm" style="width:100%">🧭 Itinéraire</button></a></div></div>'}).join(""):'<div class="card"><p class="mut">Aucune pharmacie de garde enregistrée pour le moment. Les horaires ne sont publiés qu’après vérification.</p><a href="https://www.google.com/maps/search/pharmacie+de+garde" target="_blank" rel="noopener"><button class="btn sec sm" style="margin-top:8px">Chercher sur Google Maps</button></a></div>');
+}
+function pk(o){return[uid,o].sort().join("_")}
+function openPM(o){if(!need())return;tab=3;cur="pm:"+o;draw()}
+function msgs(m){
+ if(!uid){m.innerHTML='<div class="card" style="text-align:center"><p>Connectez-vous pour discuter.</p>'+(typeof gsign=="function"?'<button class="btn" style="margin-top:12px" onclick="gsign()">Continuer avec Google</button>':"")+'</div>';return}
+ if(cur&&cur.indexOf("pm:")==0)return chat(m);
+ var c={};S.msgs.forEach(function(x){var o=x.from==uid?x.to:x.from;if(S.pr.blocked.indexOf(o)>=0)return;if(!c[o]||c[o].ts<x.ts)c[o]=x});var k=Object.keys(c).sort(function(a,b){return c[b].ts-c[a].ts});
+ m.innerHTML='<h2 style="margin:6px 0 10px">Messages</h2>'+(k.length?k.map(function(o){return '<div class="card" style="cursor:pointer" onclick="openPM(\''+o+'\')"><b>'+esc(nm(o))+'</b><p class="mut">'+esc(c[o].t)+'</p></div>'}).join(""):'<div class="card" style="text-align:center"><p class="mut">Aucune conversation. Ouvrez une annonce et touchez « Contacter ».</p></div>');
+}
+function chat(m){var o=cur.slice(3),l=S.msgs.filter(function(x){return x.pair==pk(o)}).sort(function(a,b){return a.ts-b.ts});
+ m.innerHTML='<button class="back" onclick="cur=null;draw()">← Messages</button><div class="row" style="justify-content:space-between"><h3>'+esc(nm(o))+'</h3><span><button class="chip" onclick="blk(\''+o+'\')">🚫 Bloquer</button></span></div>'+(l.length?l.map(function(x){return '<div class="msg'+(x.from==uid?" me":"")+'">'+esc(x.t)+'<div style="font-size:10px;opacity:.7">'+new Date(x.ts).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})+'</div></div>'}).join(""):'<p class="mut" style="margin:10px 0">Écrivez le premier message. Restez prudent : ne partagez pas d’informations personnelles sensibles.</p>')+'<div class="row" style="margin-top:10px"><input id="pm" placeholder="Votre message…" style="margin:0"><button class="btn sm" onclick="sendPM(\''+o+'\')">Envoyer</button></div>'}
+function sendPM(o){var t=$("pm").value.trim();if(!t)return;$("pm").value="";db.collection("msgs").add({pair:pk(o),from:uid,to:o,t:t.slice(0,1000),ts:Date.now()})}
+function blk(o){if(confirm("Bloquer cet utilisateur ?")){S.pr.blocked.push(o);sp();cur=null;draw()}}
+function prof(m){
+ if(px)return outil(m);
+ if(cur!==null&&String(cur).indexOf("pm:")!=0)return detail(m);
+ if(!uid){m.innerHTML='<div class="card" style="text-align:center"><p>Connectez-vous pour accéder à votre profil.</p>'+(typeof gsign=="function"?'<button class="btn" style="margin:12px 0" onclick="gsign()">Continuer avec Google</button>':"")+'</div>'+og()+'<button class="btn sec" onclick="theme()">🎨 Thème : '+tl()+'</button>';return}
+ var d=S.dir[uid],mine=allp().filter(function(x){return x.aid==uid});
+ m.innerHTML='<div class="av">'+(d.photo?'<img src="'+d.photo+'">':"👤")+'</div><div class="row" style="justify-content:center;margin-bottom:14px"><label class="chip" style="cursor:pointer">Modifier la photo<input type="file" accept="image/*" id="ph" style="display:none"></label></div><div class="card" oninput="saveP()"><label>Nom</label><input id="pn" value="'+esc(d.name)+'"><label>Ville</label><input id="pvl" value="'+esc(d.ville||"")+'"><p class="mut" id="sd">Enregistrement automatique</p></div>'+og()+'<h3 style="margin:6px 0 8px">Mes annonces ('+mine.length+')</h3>'+(mine.length?mine.map(card).join(""):'<p class="mut" style="margin-bottom:12px">Vous n’avez rien publié.</p>')+'<button class="btn sec" style="margin-bottom:8px" onclick="theme()">🎨 Thème : '+tl()+'</button><button class="btn sec" style="margin-bottom:8px" onclick="share()">📤 Partager Trouvéoh</button>'+(typeof fa!="undefined"?'<button class="btn sec" style="margin-bottom:8px" onclick="fa.signOut()">Se déconnecter</button>':"")+'<button class="btn red" onclick="delAll()">Supprimer mon compte et mes données</button>';
+ $("ph").onchange=function(e){var f=e.target.files[0];if(f)shrink(f,200,function(u){db.doc("directory/"+uid).set(Object.assign({},S.dir[uid],{photo:u}))})};
+}
+function tl(){var t;try{t=localStorage.getItem("tv")}catch(e){}return t=="light"?"clair":t=="dark"?"sombre":"automatique"}
+function saveP(){clearTimeout(window.ts);window.ts=setTimeout(function(){var n=$("pn");if(!n)return;S.pr.ville=$("pvl").value.trim();sp();db.doc("directory/"+uid).set(Object.assign({},S.dir[uid],{name:n.value.trim()||S.dir[uid].name,ville:S.pr.ville})).then(function(){var s=$("sd");if(s)s.textContent="✓ Enregistré"})},600)}
+function share(){var d={title:"Trouvéoh",text:"Retrouve tes objets perdus avec Trouvéoh",url:location.href};if(navigator.share)navigator.share(d).catch(function(){});else try{navigator.clipboard.writeText(d.url);toast("Lien copié")}catch(e){toast(d.url)}}
+function delAll(){if(!confirm("Supprimer définitivement votre compte, vos annonces et votre profil ?"))return;S.items.filter(function(i){return i.aid==uid}).forEach(function(i){db.doc("items/"+i.id).delete()});db.doc("directory/"+uid).delete();pdoc.delete().then(onDel,onDel)}
+var px="",q2="",gm="",gr=0,SW=["perdu","perdue","trouvé","trouve","près","pres","dans","avec","les","des","une","mon","ma","sur","qui","pour"];
+function qm(t){return q.toLowerCase().split(/\W+/).filter(function(w){return w.length>2&&SW.indexOf(w)<0}).every(function(w){return t.indexOf(w)>=0})}
+function today(){return new Date().toISOString().slice(0,10)}
+function lnow(){return new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16)}
+function addPts(n,t){S.pr.pts=(S.pr.pts||0)+n;sp();if(uid&&S.dir[uid])db.doc("directory/"+uid).set(Object.assign({},S.dir[uid],{pts:S.pr.pts}));toast("+"+n+" points · "+t)}
+function mis(k){if(!uid)return;var t=today();if(S.pr.md!=t){S.pr.md=t;S.pr.mk=[]}if(S.pr.mk.indexOf(k)<0){S.pr.mk.push(k);addPts(5,"mission du jour")}}
+function reward(){addPts(5,"victoire");mis("game")}
+function lvl(){var p=S.pr.pts||0;return[[1000,"Maître Trouvéoh"],[400,"Expert"],[150,"Détective"],[50,"Chercheur"],[0,"Débutant"]].filter(function(x){return p>=x[0]})[0][1]}
+var OG=[["lx","📍","Lieux"],["wx","🌤️","Météo"],["calc","🧮","Calculatrice"],["todo","✅","Tâches"],["ev","🎟️","Événements"],["inf","ℹ️","Infos"],["sv","🛠️","Services"],["pts","🏅","Points"]];
+function og(){return '<h3 style="margin:6px 0 8px">Outils</h3><div class="grid" style="grid-template-columns:repeat(4,1fr);gap:8px">'+OG.map(function(p){return '<div class="tile" style="padding:12px 2px;font-size:12px" onclick="px=\''+p[0]+'\';draw()"><b style="font-size:24px">'+p[1]+'</b>'+p[2]+'</div>'}).join("")+'</div><div style="height:12px"></div>'}
+function outil(m){m.innerHTML='<button class="back" onclick="px=\'\';draw()">← Profil</button>'+{lx:lxV,wx:wxV,calc:calcV,todo:todoV,ev:evV,inf:infV,sv:svV,pts:ptsV}[px]();if(px=="wx"&&!wx&&!wxl&&!wxe)wxGo()}
+function jeux(m){m.innerHTML=gameV()}
+function infV(){return lst(S.inf,"Renseignements","date","infos")}
+function evV(){return lst(S.ev.filter(function(e){return!e.date||e.date>=today()}),"Événements","date","events")}
+function svV(){return lst(S.sv,"Services et annonces locales","cat","services")+'<div class="card"><b>⭐ Vous êtes un commerce ?</b><p class="mut" style="margin:4px 0 8px">Demandez à être mis en avant en haut des listes.</p><button class="btn sec sm" onclick="lead()">Faire une demande</button></div>'}
+function sps(x){return x.sp&&(!x.spu||x.spu>=today())?1:0}
+function delX(c,id){if(confirm("Supprimer cette fiche ?"))db.doc(c+"/"+id).delete()}
+function lead(){if(!need())return;var n=prompt("Nom de votre établissement ?");if(!n)return;var t=prompt("Téléphone pour vous joindre ?");if(!t)return;db.collection("leads").add({name:n.slice(0,80),tel:t.slice(0,30),aid:uid,ts:Date.now()}).then(function(){toast("Demande envoyée ✓")})}
+var EVC=["Concert","Conférence","Église / Mosquée","Communautaire","Sport","Loisirs","Autre"],INC=["Pharmacie de garde","Santé","Transport","Sécurité","Administration","Marché / prix","Autre"];
+function pubX(m){var ev=pt=="event";m.innerHTML='<button class="back" onclick="pt=\'\';draw()">← Changer</button><div class="card"><span class="tag found">'+(ev?"Événement":"Renseignement")+'</span><div style="height:10px"></div><label>Titre</label><input id="xt" maxlength="80"><label>Catégorie</label><select id="xc">'+(ev?EVC:INC).map(function(c){return '<option>'+c+'</option>'}).join("")+'</select><label>Description</label><textarea id="xd" rows="3" maxlength="500"></textarea><label>Ville</label><input id="xv" value="'+esc(S.pr.ville||"")+'">'+(ev?'<label>Date</label><input id="xdt" type="date">':"")+'<label>Téléphone (facultatif)</label><input id="xp" type="tel"><p class="mut" style="margin-bottom:10px">Les fiches sont visibles de tous et peuvent être signalées.</p><button class="btn" onclick="postX()">Publier</button></div>'}
+function postX(){var t=$("xt").value.trim(),v=$("xv").value.trim(),ev=pt=="event",d=ev?$("xdt").value:today();if(!t||!v||!d){toast("Titre, ville et date obligatoires");return}
+ db.collection(ev?"events":"infos").add({title:t,cat:$("xc").value,desc:$("xd").value.trim(),ville:v,date:d,tel:$("xp").value.trim(),aid:uid,ts:Date.now()}).then(function(){toast("Publié ✓")},function(){toast("Publication impossible : droits insuffisants")});
+ S.pr.ville=v;sp();addPts(5,"publication");px=ev?"ev":"inf";pt="";tab=5;draw()}
+var wx=null,wxl=0,wxc="",wxe="";
+function wxGo(c){wxl=1;wxe="";var city=c||wxc||S.pr.ville||"Abidjan";wxc=city;
+ fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&language=fr&name="+encodeURIComponent(city)).then(function(r){return r.json()}).then(function(g){if(!g.results)throw 0;var p=g.results[0];return fetch("https://api.open-meteo.com/v1/forecast?latitude="+p.latitude+"&longitude="+p.longitude+"&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto").then(function(r){return r.json()}).then(function(w){w.place=p.name;wx=w})}).catch(function(){wx=null;wxe="Météo indisponible (connexion ou ville introuvable). Elle fonctionne dans la version hébergée."}).then(function(){wxl=0;ref()})}
+function wc(c){return c==0?"☀️ Ciel dégagé":c<4?"⛅ Nuageux":c<50?"🌫️ Brouillard":c<70?"🌧️ Pluie":c<80?"❄️ Neige":c<90?"🌦️ Averses":"⛈️ Orage"}
+function wi1(c){return wc(c).split(" ")[0]}
+function wt(c){return wc(c).replace(/^\S+\s/,"")}
+function wxV(){return '<div class="card"><label>Ville</label><div class="row"><input id="wc" value="'+esc(wxc||S.pr.ville||"")+'" style="margin:0"><button class="btn sm" onclick="wxGo($(\'wc\').value)">OK</button></div></div>'+(wxl?'<p class="mut">Chargement…</p>':wx?'<div class="card" style="text-align:center"><div style="font-size:40px">'+wi1(wx.current.weather_code)+'</div><h2>'+Math.round(wx.current.temperature_2m)+' °C · '+esc(wx.place)+'</h2><p>'+wt(wx.current.weather_code)+'</p><p class="mut">Mis à jour : '+esc(wx.current.time.replace("T"," "))+'</p></div>'+wx.daily.time.map(function(d,i){return '<div class="card row" style="justify-content:space-between;padding:10px 14px"><span>'+new Date(d).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric"})+'</span><span>'+wi1(wx.daily.weather_code[i])+'</span><span class="mut">'+Math.round(wx.daily.temperature_2m_min[i])+'° / '+Math.round(wx.daily.temperature_2m_max[i])+'°</span></div>'}).join(""):'<div class="card mut">'+esc(wxe||"Entrez une ville.")+'</div>')}
+var cs={a:null,op:"",cur:"0",fresh:1},cmode="c";
+function ck(k){
+ if("0123456789.".indexOf(k)>=0){if(cs.fresh||(cs.cur=="0"&&k!=".")){cs.cur=k;cs.fresh=0}else if(!(k=="."&&cs.cur.indexOf(".")>=0))cs.cur+=k}
+ else if(k=="C")cs={a:null,op:"",cur:"0",fresh:1};
+ else if(k=="%")cs.cur=String(parseFloat(cs.cur)/100);
+ else{if(cs.op&&!cs.fresh)cal();cs.a=parseFloat(cs.cur);cs.op=k=="="?"":k;cs.fresh=1}
+ $("cd").textContent=cs.cur}
+function cal(){var b=parseFloat(cs.cur),a=cs.a,r;if(cs.op=="+")r=a+b;else if(cs.op=="−")r=a-b;else if(cs.op=="×")r=a*b;else if(cs.op=="÷"){if(b==0){cs.cur="Division impossible";cs.a=null;cs.op="";cs.fresh=1;return}r=a/b}else return;cs.cur=String(Math.round(r*1e9)/1e9)}
+function calcV(){
+ var tabs='<div class="chips">'+[["c","Calcul"],["t","TVA"],["p","Pourboire"],["l","Prêt"]].map(function(x){return '<button class="chip '+(cmode==x[0]?"on":"")+'" onclick="cmode=\''+x[0]+'\';draw()">'+x[1]+'</button>'}).join("")+'</div>';
+ if(cmode=="c")return tabs+'<div class="card"><div id="cd" style="text-align:right;font-size:28px;min-height:40px;word-break:break-all">'+esc(cs.cur)+'</div></div><div class="grid" style="grid-template-columns:repeat(4,1fr);gap:8px">'+["C","%","÷","×","7","8","9","−","4","5","6","+","1","2","3","=","0","."].map(function(k){return '<button class="chip" style="padding:16px 0;font-size:20px" onclick="ck(\''+k+'\')">'+k+'</button>'}).join("")+'</div>';
+ var F={t:[["Montant (FCFA)","fm"],["Taux de TVA (%) — à vérifier selon la réglementation","ft"]],p:[["Montant (FCFA)","fm"],["Pourboire (%)","ft"]],l:[["Capital emprunté (FCFA)","fm"],["Taux annuel (%)","ft"],["Durée (mois)","fd"]]}[cmode];
+ return tabs+'<div class="card">'+F.map(function(x){return '<label>'+x[0]+'</label><input id="'+x[1]+'" type="number" inputmode="decimal" min="0">'}).join("")+'<button class="btn" onclick="fcalc()">Calculer</button></div><div class="card" id="fr" style="display:none"></div>'}
+function fcalc(){var m=parseFloat($("fm").value),t=parseFloat($("ft").value),d=$("fd")?parseFloat($("fd").value):1,f=function(x){return Math.round(x).toLocaleString("fr-FR")+" FCFA"},r$="";
+ if(!(m>=0)||!(t>=0)||!(d>0))r$="Valeurs invalides.";
+ else if(cmode=="t")r$="TVA : <b>"+f(m*t/100)+"</b><br>TTC : <b>"+f(m*(1+t/100))+"</b><br>Si ce montant est TTC, HT : <b>"+f(m/(1+t/100))+"</b>";
+ else if(cmode=="p")r$="Pourboire : <b>"+f(m*t/100)+"</b><br>Total : <b>"+f(m*(1+t/100))+"</b>";
+ else{var r=t/1200,M=r?m*r/(1-Math.pow(1+r,-d)):m/d;r$="Mensualité : <b>"+f(M)+"</b><br>Total remboursé : <b>"+f(M*d)+"</b><br>Coût du crédit : <b>"+f(M*d-m)+"</b><br><span class=\"mut\">Hypothèse : taux annuel fixe, mensualités constantes.</span>"}
+ var e=$("fr");e.style.display="block";e.innerHTML=r$}
+var tk=[];try{tk=JSON.parse(localStorage.getItem("tvt"))||[]}catch(e){}
+function tsv(){try{localStorage.setItem("tvt",JSON.stringify(tk))}catch(e){}}
+function todoV(){var o=tk.slice().sort(function(a,b){return(a.d||"9")>(b.d||"9")?1:-1}),n=lnow();
+ return '<div class="card"><input id="tt" placeholder="Nouvelle tâche…"><div class="row"><select id="tc" style="margin:0">'+["Personnel","Travail","Courses","Événements"].map(function(c){return '<option>'+c+'</option>'}).join("")+'</select><input id="td" type="datetime-local" style="margin:0"></div><button class="btn" style="margin-top:10px" onclick="tadd()">Ajouter</button></div>'+(o.length?o.map(function(t){var late=!t.x&&t.d&&t.d<n;return '<div class="card row"><input type="checkbox" style="width:22px;margin:0" '+(t.x?"checked":"")+' onchange="ttg('+t.id+')"><div style="flex:1;'+(t.x?"text-decoration:line-through;opacity:.6":"")+'"><div onclick="ted('+t.id+')">'+esc(t.t)+'</div><div class="mut" style="'+(late?"color:var(--lost)":"")+'">'+esc(t.c)+(t.d?" · "+esc(t.d.replace("T"," ")):"")+(late?" · en retard":"")+'</div></div><button class="chip" onclick="tdl('+t.id+')">🗑️</button></div>'}).join(""):'<p class="mut">Aucune tâche.</p>')+'<p class="mut">Tâches enregistrées sur ce téléphone. Les rappels sonnent quand l’application est ouverte. Touchez une tâche pour la modifier.</p>'}
+function tadd(){var t=$("tt").value.trim();if(!t)return;tk.push({id:Date.now(),t:t,c:$("tc").value,d:$("td").value,x:0,n:0});tsv();mis("task");draw()}
+function ttg(id){tk.forEach(function(t){if(t.id==id)t.x=!t.x});tsv();draw()}
+function tdl(id){tk=tk.filter(function(t){return t.id!=id});tsv();draw()}
+function ted(id){var t=tk.filter(function(x){return x.id==id})[0],v=prompt("Modifier la tâche",t.t);if(v&&v.trim()){t.t=v.trim();tsv();draw()}}
+setInterval(function(){var n=lnow();tk.forEach(function(t){if(!t.x&&!t.n&&t.d&&t.d<=n){t.n=1;tsv();notify("Rappel : "+t.t)}})},30000);
+function best(k,v,low){var o=S.pr.scores[k];if(o===undefined||(low?v<o:v>o)){S.pr.scores[k]=v;sp()}}
+function win1(k){S.pr.scores[k]=(S.pr.scores[k]||0)+1;sp();reward()}
+var tb,tw;
+function newTTT(){tb=Array(9).fill("");tw=""}
+function win(b){var L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];for(var i=0;i<8;i++){var a=L[i];if(b[a[0]]&&b[a[0]]==b[a[1]]&&b[a[0]]==b[a[2]])return b[a[0]]}return b.indexOf("")<0?"=":""}
+function tp(i){if(tb[i]||tw)return;tb[i]="X";tw=win(tb);if(!tw){var e=[];tb.forEach(function(v,j){if(!v)e.push(j)});tb[e[Math.floor(Math.random()*e.length)]]="O";tw=win(tb)}if(tw=="X")win1("ttt");draw()}
+function tttV(){return '<h3 style="text-align:center">Vous : ❌ · Ordinateur : ⭕</h3><div style="display:grid;grid-template-columns:repeat(3,84px);gap:8px;justify-content:center;margin:14px 0">'+tb.map(function(v,i){return '<button class="chip" style="height:84px;font-size:34px" onclick="tp('+i+')">'+(v=="X"?"❌":v=="O"?"⭕":"")+'</button>'}).join("")+'</div><p style="text-align:center;font-weight:700;margin-bottom:10px">'+(tw=="X"?"Bravo, vous gagnez ! 🎉":tw=="O"?"L’ordinateur gagne.":tw=="="?"Égalité.":"À vous de jouer")+'</p><button class="btn" onclick="newTTT();draw()">Nouvelle partie</button>'}
+var cd,op,mt,mv,lk;
+function newMem(){var e=["🐶","🐱","🦊","🐼","🐸","🦁","🐵","🐰"];cd=e.concat(e).sort(function(){return Math.random()-.5});op=[];mt={};mv=0;lk=0}
+function mf(i){if(lk||mt[i]||op.indexOf(i)>=0)return;op.push(i);if(op.length==2){mv++;if(cd[op[0]]==cd[op[1]]){mt[op[0]]=mt[op[1]]=1;op=[];if(Object.keys(mt).length==16){best("mem",mv,1);reward()}}else{lk=1;draw();setTimeout(function(){op=[];lk=0;draw()},800);return}}draw()}
+function memV(){return '<p style="text-align:center;font-weight:700">Coups : '+mv+(Object.keys(mt).length==16?" · Bravo ! 🎉":"")+'</p><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0">'+cd.map(function(v,i){return '<button class="chip" style="height:72px;font-size:28px" onclick="mf('+i+')">'+(mt[i]||op.indexOf(i)>=0?v:"❓")+'</button>'}).join("")+'</div><button class="btn" onclick="newMem();draw()">Rejouer</button>'}
+var nn,nt,nq="";
+function newNum(){nn=1+Math.floor(Math.random()*100);nt=0;nq="J’ai choisi un nombre entre 1 et 100."}
+function numV(){return '<div class="card"><h3>Nombre mystère</h3><p style="margin:8px 0">'+nq+'</p><input id="ng" type="number" inputmode="numeric" placeholder="Votre proposition"><button class="btn" onclick="gn()">Valider</button><p class="mut" style="margin:10px 0">Essais : '+nt+'</p><button class="btn sec" onclick="newNum();draw()">Nouvelle partie</button></div>'}
+function gn(){var v=parseInt($("ng").value);if(isNaN(v)||nq.indexOf("Trouvé")==0)return;nt++;if(v==nn){best("num",nt,1);reward()}nq=v==nn?"Trouvé en "+nt+" essais ! 🎉":v<nn?v+" : c’est plus grand.":v+" : c’est plus petit.";draw()}
+var pf;
+function pfp(c){if(pf.a>=5||pf.b>=5)return;var o=Math.floor(Math.random()*3),E=["✊","✋","✌️"],r=(c-o+3)%3;pf.m=E[c]+" vs "+E[o]+" : "+(r==0?"égalité":r==1?"point pour vous":"point pour l’ordinateur");if(r==1)pf.a++;if(r==2)pf.b++;if(pf.a>=5)win1("pfc");draw()}
+function pfV(){var d=pf.a>=5||pf.b>=5;return '<h3 style="text-align:center">Vous '+pf.a+' – '+pf.b+' Ordinateur</h3><p style="text-align:center;margin:12px 0;min-height:24px">'+(d?(pf.a>=5?"Bravo, vous gagnez ! 🎉":"L’ordinateur gagne."):pf.m)+'</p><div class="row">'+["✊","✋","✌️"].map(function(e,i){return '<button class="chip" style="flex:1;font-size:34px" onclick="pfp('+i+')">'+e+'</button>'}).join("")+'</div><button class="btn" style="margin-top:16px" onclick="pf={a:0,b:0,m:\'\'};draw()">Rejouer</button>'}
+var QZ=[["Capitale de la Côte d’Ivoire (administrative) ?",["Abidjan","Yamoussoukro","Bouaké"],1],["Combien de continents ?",["5","7","9"],1],["Plus grand océan ?",["Atlantique","Indien","Pacifique"],2],["Planète la plus proche du Soleil ?",["Mercure","Vénus","Mars"],0],["Côtés d’un hexagone ?",["5","6","8"],1],["Capitale du Maroc ?",["Casablanca","Rabat","Fès"],1],["Formule de l’eau ?",["H2O","CO2","O2"],0],["Plus long fleuve d’Afrique ?",["Niger","Congo","Nil"],2]];
+var qi,qs,qq;
+function newQz(){qi=0;qs=0;qq=QZ.slice().sort(function(){return Math.random()-.5}).slice(0,5)}
+function qa(i){if(qi>=5)return;if(qq[qi][2]==i)qs++;qi++;if(qi==5){best("qz",qs);if(qs>=3)reward()}draw()}
+function qzV(){if(qi>=5)return '<div class="card" style="text-align:center"><h2>Score : '+qs+' / 5</h2><button class="btn" style="margin-top:12px" onclick="newQz();draw()">Rejouer</button></div>';var q=qq[qi];return '<div class="card"><p class="mut">Question '+(qi+1)+' / 5</p><h3 style="margin:6px 0 12px">'+q[0]+'</h3>'+q[1].map(function(a,i){return '<button class="btn sec" style="margin-bottom:8px" onclick="qa('+i+')">'+a+'</button>'}).join("")+'</div>'}
+var rs,rt,rm,rto;
+function rxc(){if(rs==0||rs==3){rs=1;rm="Attendez le vert…";draw();rto=setTimeout(function(){rs=2;rt=Date.now();draw()},1000+Math.random()*2500)}else if(rs==1){clearTimeout(rto);rs=3;rm="Trop tôt ! 😅";draw()}else{var d=Date.now()-rt;rs=3;rm=d+" ms";best("rx",d,1);if(d<400)reward();draw()}}
+function rxV(){return '<button style="height:120px;border-radius:16px;border:0;width:100%;font-size:20px;font-weight:700;color:#fff;cursor:pointer;background:'+(rs==2?"#059669":"#e11d48")+'" onclick="rxc()">'+(rs==2?"TOUCHEZ !":rs==1?"Attendez…":rs==3?"Rejouer":"Démarrer")+'</button><p style="text-align:center;font-weight:700;margin-top:14px;min-height:24px">'+(rm||"")+'</p>'}
+var ci,cs2,cq;
+function newCm(){ci=0;cs2=0;cq=[];for(var i=0;i<5;i++){var a=2+Math.floor(Math.random()*12),b=2+Math.floor(Math.random()*12);cq.push(i%2?[a+" × "+b,a*b]:[(a*b)+" − "+a,a*b-a])}}
+function cmV(){if(ci>=5)return '<div class="card" style="text-align:center"><h2>Score : '+cs2+' / 5</h2><button class="btn" style="margin-top:12px" onclick="newCm();draw()">Rejouer</button></div>';return '<div class="card"><p class="mut">Question '+(ci+1)+' / 5</p><h2 style="margin:8px 0">'+cq[ci][0]+' = ?</h2><input id="ca" type="number" inputmode="numeric"><button class="btn" onclick="cma()">Valider</button></div>'}
+function cma(){var v=parseInt($("ca").value);if(isNaN(v))return;if(v==cq[ci][1])cs2++;ci++;if(ci==5){best("cm",cs2);if(cs2>=4)reward()}draw()}
+var WL=["MARCHE","PHARMACIE","TROUVE","OBJET","ABIDJAN","TELEPHONE","PORTEFEUILLE","VOYAGE"],wi,ws,wq;
+function newMt(){wi=0;ws=0;wq=WL.slice().sort(function(){return Math.random()-.5}).slice(0,5).map(function(w){var s;do{s=w.split("").sort(function(){return Math.random()-.5}).join("")}while(s==w);return[w,s]})}
+function mtV(){if(wi>=5)return '<div class="card" style="text-align:center"><h2>Score : '+ws+' / 5</h2><button class="btn" style="margin-top:12px" onclick="newMt();draw()">Rejouer</button></div>';return '<div class="card"><p class="mut">Mot '+(wi+1)+' / 5</p><h2 style="margin:8px 0;letter-spacing:4px">'+wq[wi][1]+'</h2><input id="wa" placeholder="Votre mot" autocapitalize="characters"><button class="btn" onclick="mta()">Valider</button></div>'}
+function mta(){var v=$("wa").value.trim().toUpperCase();if(!v)return;if(v==wq[wi][0])ws++;wi++;if(wi==5){best("mt",ws);if(ws>=4)reward()}draw()}
+var GL=[["ttt","⭕","Morpion","Alignez 3 symboles (ligne, colonne ou diagonale) avant l’ordinateur. Vous jouez ❌ et commencez : touchez une case vide.",newTTT,tttV],
+["mem","🧠","Mémoire","Retournez deux cartes à la fois. Si elles sont identiques, elles restent visibles. Trouvez les 8 paires avec le moins de coups possible.",newMem,memV],
+["num","🔢","Nombre mystère","Un nombre entre 1 et 100 est caché. Proposez un nombre : l’app indique « plus grand » ou « plus petit ». Trouvez-le en un minimum d’essais.",newNum,numV],
+["pfc","✊","Pierre-Feuille-Ciseaux","La pierre bat les ciseaux, les ciseaux battent la feuille, la feuille bat la pierre. Le premier à 5 points gagne.",function(){pf={a:0,b:0,m:""}},pfV],
+["qz","❓","Quiz","Répondez à 5 questions de culture générale. 1 point par bonne réponse, 3 bonnes réponses minimum pour gagner.",newQz,qzV],
+["rx","⚡","Réflexe","Touchez le bouton rouge pour démarrer. Quand il devient vert, touchez le plus vite possible. Trop tôt = raté. Votre meilleur temps (ms) est gardé.",function(){rs=0;rm=""},rxV],
+["cm","➕","Calcul mental","Résolvez 5 calculs de tête et saisissez le résultat. 4 bonnes réponses minimum pour gagner.",newCm,cmV],
+["mt","🔤","Mots mélangés","Remettez les lettres dans l’ordre pour retrouver le mot. 5 mots, 4 bons minimum pour gagner.",newMt,mtV]];
+function gameV(){
+ if(!gm)return '<h2 style="margin:0 0 14px">Jeux</h2><div class="grid">'+GL.map(function(g){return '<div class="tile" onclick="gm=\''+g[0]+'\';gr=1;draw()"><b>'+g[1]+'</b>'+g[2]+(S.pr.scores[g[0]]!==undefined?'<div class="mut">Record : '+S.pr.scores[g[0]]+'</div>':"")+'</div>'}).join("")+'</div><p class="mut" style="margin-top:12px">Victoire = +5 points. Vos records sont enregistrés sur votre profil.</p>';
+ var g=GL.filter(function(x){return x[0]==gm})[0];
+ if(gr)return '<button class="back" onclick="gm=\'\';gr=0;draw()">← Jeux</button><div class="card"><div style="font-size:44px;text-align:center">'+g[1]+'</div><h2 style="text-align:center;margin:6px 0">'+g[2]+'</h2><b>Comment jouer ?</b><p style="margin:6px 0 14px">'+g[3]+'</p><button class="btn" onclick="gr=0;GL.filter(function(x){return x[0]==gm})[0][4]();draw()">▶️ Commencer</button></div>';
+ return '<button class="back" onclick="gm=\'\';draw()">← Jeux</button>'+g[5]()}
+function lst(a,h,k,c){var l=a.filter(function(x){return!q2||JSON.stringify(x).toLowerCase().indexOf(q2.toLowerCase())>=0}).sort(function(x,y){return sps(y)-sps(x)||(k=="date"?(String(x.date)>String(y.date)?1:-1):0)});
+ return '<h2 style="margin:0 0 8px">'+h+'</h2><input id="q2" placeholder="🔍 Ville, catégorie, nom…" value="'+esc(q2)+'" oninput="q2=this.value;clearTimeout(window.t2);window.t2=setTimeout(ref,300)">'+(l.length?l.map(function(x){return '<div class="card"><b>'+(sps(x)?'<span class="tag found">⭐ Sponsorisé</span> ':"")+esc(x.title||x.name)+'</b><p class="mut">'+esc(x.cat||"")+' · 📍 '+esc(x.ville||"")+(x.date?" · "+esc(x.date):"")+(x.price?" · "+esc(x.price):"")+(x.aid?" · par "+esc(nm(x.aid)):"")+'</p><p>'+esc(x.desc||"")+'</p><div class="row" style="margin-top:8px">'+(x.tel?'<a href="tel:'+esc(x.tel)+'" style="flex:1"><button class="btn sm" style="width:100%">📞 Contacter</button></a>':"")+''+(x.aid&&x.aid==uid?'<button class="btn red sm" style="flex:1" onclick="delX(\''+c+'\',\''+x.id+'\')">Supprimer</button>':'<button class="btn sec sm" style="flex:1" onclick="rpt(\''+x.id+'\')">🚩 Signaler</button>')+'</div></div>'}).join(""):'<div class="card"><p class="mut">Rien d’enregistré pour le moment. Les fiches (concerts, locations, réparateurs, livraison, lieux de culte…) sont ajoutées après vérification.</p></div>')}
+function rpt(id){if(!need())return;db.collection("reports").add({iid:id,aid:uid,reason:"expirée ou frauduleuse",ts:Date.now()}).then(function(){toast("Signalement envoyé")})}
+function ptsV(){var MS=[["pub","Publier une annonce"],["game","Gagner une partie"],["task","Ajouter une tâche"]],t=today(),lb=Object.keys(S.dir).map(function(k){return[k,S.dir[k].pts||0]}).sort(function(a,b){return b[1]-a[1]}).slice(0,10);
+ return '<div class="card" style="text-align:center"><div style="font-size:34px">🏅</div><h2>'+(S.pr.pts||0)+' points</h2><p>Niveau : <b>'+lvl()+'</b></p><p class="mut">Débutant → Chercheur (50) → Détective (150) → Expert (400) → Maître Trouvéoh (1000)</p></div><div class="card"><b>Missions du jour (+5 points)</b>'+MS.map(function(x){return '<p>'+(S.pr.md==t&&S.pr.mk.indexOf(x[0])>=0?"✅":"⬜")+' '+x[1]+'</p>'}).join("")+'</div><div class="card"><b>Classement</b>'+lb.map(function(x,i){return '<p>'+(i+1)+'. '+esc(nm(x[0]))+' — '+x[1]+'</p>'}).join("")+'<p class="mut" style="margin-top:6px">+10 publication · +20 objet restitué · +5 victoire ou mission.</p></div>'+(uid?"":'<p class="mut">Connectez-vous pour gagner des points.</p>')}
+var LC=[["💊","Pharmacies","pharmacie",'["amenity"="pharmacy"]'],["🏥","Hôpitaux","hôpital clinique",'["amenity"~"hospital|clinic"]'],["🛒","Marchés","marché",'["amenity"="marketplace"]'],["🍽️","Restaurants","restaurant",'["amenity"="restaurant"]'],["🏨","Hôtels","hôtel",'["tourism"="hotel"]'],["🏬","Centres commerciaux","centre commercial",'["shop"="mall"]'],["🕌","Mosquées","mosquée",'["amenity"="place_of_worship"]["religion"="muslim"]'],["⛪","Églises","église",'["amenity"="place_of_worship"]["religion"="christian"]'],["🎡","Parcs d’attractions","parc d'attractions",'["tourism"="theme_park"]'],["🏛️","Musées","musée",'["tourism"="museum"]'],["🏫","Écoles","école",'["amenity"="school"]'],["🎓","Universités","université",'["amenity"="university"]'],["🏦","Banques et DAB","banque distributeur",'["amenity"~"bank|atm"]'],["⛽","Stations-service","station-service",'["amenity"="fuel"]'],["🅿️","Parkings","parking",'["amenity"="parking"]'],["🌳","Parcs et lieux publics","parc jardin lieu public",'["leisure"="park"]'],["🚓","Police","commissariat police",'["amenity"="police"]'],["🛍️","Shopping","magasin boutique",'["shop"]']];
+function mu(i){return "https://www.google.com/maps/search/"+encodeURIComponent(LC[i][2]+(pos?"":" "+(S.pr.ville||"")))+(pos?"/@"+pos.lat+","+pos.lng+",14z":"")}
+function lg(){return '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px">'+LC.map(function(c,i){return '<a class="tile" style="padding:12px 2px;font-size:12px;text-decoration:none;color:inherit;display:block" href="'+mu(i)+'" target="_blank" rel="noopener"><b style="font-size:24px">'+c[0]+'</b>'+c[1]+'</a>'}).join("")+'</div><p class="mut" style="margin:8px 0">Touchez une catégorie : Google Maps s’ouvre directement autour de vous.</p>'}
+function lq(){return '<div class="chips" style="overflow-x:auto;margin-top:0">'+LC.slice(0,6).map(function(c,i){return '<button class="chip" style="flex:none;white-space:nowrap" onclick="near('+i+')">'+c[0]+' '+c[1]+'</button>'}).join("")+'<button class="chip" style="flex:none" onclick="go(2)">Tout voir ›</button></div>'}
+function near(i){window.open("https://www.google.com/maps/search/"+encodeURIComponent(LC[i][2]+(pos?"":" "+(S.pr.ville||"")))+(pos?"/@"+pos.lat+","+pos.lng+",14z":""),"_blank")}
+var lxi=-1,lxr=[],lxl=0,lxk=3,lxe="";
+function gm2(c){return "https://www.google.com/maps/search/"+encodeURIComponent(c[2]+(pos?"":" "+(S.pr.ville||"")))+(pos?"/@"+pos.lat+","+pos.lng+",14z":"")}
+function lxV(){
+ if(lxi<0)return '<h2 style="margin:0 0 4px">Lieux autour de moi</h2><p class="mut" style="margin-bottom:12px">Données OpenStreetMap, disponibles partout dans le monde.</p><div class="grid">'+LC.map(function(c,i){return '<div class="tile" onclick="lxGo('+i+')"><b>'+c[0]+'</b>'+c[1]+'</div>'}).join("")+'</div>';
+ var c=LC[lxi];
+ return '<button class="back" onclick="lxi=-1;draw()">← Lieux</button><h3 style="margin-bottom:8px">'+c[0]+' '+c[1]+'</h3><div class="row" style="margin-bottom:10px"><select style="margin:0" onchange="lxk=+this.value;lxGo(lxi)">'+[1,3,10].map(function(k){return '<option value="'+k+'"'+(lxk==k?" selected":"")+'>Rayon '+k+' km</option>'}).join("")+'</select><a href="'+gm2(c)+'" target="_blank" rel="noopener"><button class="btn sec sm">Google Maps</button></a></div>'+(lxl?'<p class="mut">Recherche…</p>':lxr.length?lxr.map(function(p){return '<div class="card"><b>'+esc(p.n)+'</b><p class="mut">'+p.d.toFixed(1)+' km'+(p.a?" · "+esc(p.a):"")+'</p><div class="row" style="margin-top:8px">'+(p.t?'<a href="tel:'+esc(p.t)+'" style="flex:1"><button class="btn sm" style="width:100%">📞 Appeler</button></a>':"")+'<a href="https://www.google.com/maps/dir/?api=1&destination='+p.la+','+p.lo+'" target="_blank" rel="noopener" style="flex:1"><button class="btn sec sm" style="width:100%">🧭 Itinéraire</button></a></div></div>'}).join(""):'<div class="card mut">'+esc(lxe||"Aucun résultat dans ce rayon.")+'</div>')}
+function lxGo(i){lxi=i;lxl=1;lxe="";lxr=[];draw();
+ var run=function(la,lo){var c=LC[i];fetch("https://overpass-api.de/api/interpreter?data="+encodeURIComponent('[out:json][timeout:20];nwr'+c[3]+'(around:'+lxk*1000+','+la+','+lo+');out center 60;')).then(function(r){return r.json()}).then(function(j){lxr=j.elements.map(function(e){var t=e.tags||{},a=e.lat||(e.center&&e.center.lat),b=e.lon||(e.center&&e.center.lon);return{n:t.name||"Sans nom",la:a,lo:b,d:dist(la,lo,a,b),a:[t["addr:street"],t["addr:city"]].filter(Boolean).join(", "),t:t.phone||t["contact:phone"]||""}}).filter(function(p){return p.la}).sort(function(x,y){return x.d-y.d}).slice(0,30)}).catch(function(){lxe="Recherche intégrée indisponible ici : utilisez le bouton Google Maps. Elle fonctionne dans la version hébergée."}).then(function(){lxl=0;draw()})};
+ if(pos)run(pos.lat,pos.lng);else locate(function(){run(pos.lat,pos.lng)});
+ setTimeout(function(){if(lxl&&!pos){lxl=0;lxe="Position indisponible : activez le GPS ou utilisez Google Maps.";draw()}},11000)}
+function rows(s){return s.docs.map(function(d){var x=d.data();x.id=d.id;return x})}
+function pubSub(){var er=function(){fail=1;draw()};
+ db.collection("directory").onSnapshot(function(s){var o=uid&&S.dir[uid];S.dir={};rows(s).forEach(function(x){S.dir[x.id]=x});if(o&&!S.dir[uid])S.dir[uid]=o;S.r1=1;ref()},er);
+ db.collection("items").onSnapshot(function(s){S.items=rows(s).sort(function(a,b){return b.ts-a.ts});
+  s.docChanges().forEach(function(c){if(c.type=="added"){var x=c.doc.data();x.id=c.doc.id;if(uid&&x.ts>boot&&x.aid!=uid&&S.items.some(function(o){return o.aid==uid&&o.type!=x.type&&o.st!="returned"&&ov(x,o)}))notify("Une annonce peut correspondre à la vôtre !")}});ref()},er);
+ db.collection("pharmacies").onSnapshot(function(s){S.ph=rows(s);ref()},function(){});db.collection("events").onSnapshot(function(s){S.ev=rows(s);ref()},function(){});db.collection("services").onSnapshot(function(s){S.sv=rows(s);ref()},function(){});db.collection("infos").onSnapshot(function(s){S.inf=rows(s);ref()},function(){});db.collection("comments").onSnapshot(function(s){S.cm=rows(s);ref()},function(){})}
+function userSub(){var er=function(){fail=1;draw()};
+ pdoc=db.doc("data/users/"+uid+"/profile");db.doc("directory/"+uid).get().then(function(s){if(s.exists){var x=s.data();x.id=uid;S.dir[uid]=x;ref()}},function(){});
+ pdoc.get().then(function(s){if(s.exists)Object.assign(S.pr,s.data());S.pr.favs=S.pr.favs||[];S.pr.blocked=S.pr.blocked||[];S.r2=1;ref()},function(){S.r2=1;ref()});
+ var mm={a:[],b:[]};function mg(){S.msgs=mm.a.concat(mm.b);ref()}
+ [["from","a"],["to","b"]].forEach(function(p){db.collection("msgs").where(p[0],"==",uid).onSnapshot(function(s){mm[p[1]]=rows(s);s.docChanges().forEach(function(c){var x=c.doc.data();if(p[0]=="to"&&c.type=="added"&&x.ts>boot&&S.pr.blocked.indexOf(x.from)<0)notify("Nouveau message de "+nm(x.from))});mg()},er)})}
+var fa,fbCfg={apiKey:"AIzaSyCirlL0kS2QEC6hz3BC1p8q9oMNE4diog4",authDomain:"trouveoh.firebaseapp.com",projectId:"trouveoh",storageBucket:"trouveoh.firebasestorage.app",messagingSenderId:"277694685466",appId:"1:277694685466:web:287b2057bb9fd7f6b04ca3"};
+function gsign(){var p=new firebase.auth.GoogleAuthProvider();fa.signInWithPopup(p).catch(function(e){if(e.code=="auth/popup-blocked"||e.code=="auth/operation-not-supported-in-this-environment")fa.signInWithRedirect(p);else if(e.code!="auth/popup-closed-by-user")toast("Connexion impossible : "+e.code)})}
+(function(){draw();try{firebase.initializeApp(fbCfg);fa=firebase.auth();db=firebase.firestore();var started=0;
+fa.getRedirectResult().catch(function(){});
+fa.onAuthStateChanged(function(u){if(started){if(!u||u.uid!=uid)location.reload();return}started=1;
+if(u){uid=u.uid;me={id:u.uid,name:u.displayName||""};pubSub();userSub()}else{uid=null;me=null;S.r2=1;pubSub()}});
+}catch(e){fail=1;draw()}})();
+</script></body></html>
