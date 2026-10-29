@@ -1,1 +1,147 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trouvéoh</title>
+<style>
+:root{--vert:#0f5b3e;--orange:#f28c1b;--fond:#f5f7f3;--encre:#14211b;--gris:#5d6b63;--ligne:#d9e0da}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fond);color:var(--encre);font:16px/1.5 "Avenir Next","Segoe UI",system-ui,sans-serif}
+header{background:var(--vert);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{margin:0;font-size:22px}
+main{max-width:640px;margin:0 auto;padding:16px}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--orange);color:#14211b;font-weight:600}
+button.sec{background:transparent;color:#fff;border:1px solid #ffffff88}
+form{background:#fff;border:1px solid var(--ligne);border-radius:14px;padding:14px;display:grid;gap:10px;margin-bottom:20px}
+input,select,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--ligne);border-radius:8px;background:#fff}
+.annonce{background:#fff;border:1px solid var(--ligne);border-left:6px solid var(--vert);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.annonce.perdu{border-left-color:var(--orange)}
+.annonce h3{margin:0 0 4px;font-size:17px}
+.meta{color:var(--gris);font-size:14px}
+.vide{color:var(--gris);text-align:center;padding:24px 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>Trouvéoh</h1>
+  <div>
+    <button id="btn-login">Se connecter avec Google</button>
+    <span id="user" hidden></span>
+    <button id="btn-logout" class="sec" hidden>Se déconnecter</button>
+  </div>
+</header>
+
+<main>
+  <form id="form" hidden>
+    <select id="type" required>
+      <option value="perdu">J’ai perdu un objet</option>
+      <option value="trouve">J’ai trouvé un objet</option>
+    </select>
+    <input id="titre" placeholder="Objet (ex. : clés, téléphone)" maxlength="80" required>
+    <input id="lieu" placeholder="Lieu (ex. : marché de Cocody)" maxlength="80" required>
+    <textarea id="description" rows="3" placeholder="Description" maxlength="300"></textarea>
+    <button type="submit">Publier l’annonce</button>
+  </form>
+
+  <section id="liste"><p class="vide">Connecte-toi pour voir les annonces.</p></section>
+  <p id="erreur" class="meta" role="alert"></p>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyCirlL0kS2QEC6hz3BC1p8q9oMNE4diog4",
+  authDomain: "trouveoh.firebaseapp.com",
+  databaseURL: "https://trouveoh-default-rtdb.firebaseio.com",
+  projectId: "trouveoh",
+  storageBucket: "trouveoh.firebasestorage.app",
+  messagingSenderId: "277694685466",
+  appId: "1:277694685466:web:287b2057bb9fd7f6b04ca3",
+  measurementId: "G-EXLJKD7PG4"
+});
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+const erreur = msg => { $("erreur").textContent = msg || ""; };
+let stopEcoute = null;
+
+$("btn-login").onclick = async () => {
+  erreur();
+  const provider = new GoogleAuthProvider();
+  try { await signInWithPopup(auth, provider); }
+  catch (e) {
+    if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") {
+      await signInWithRedirect(auth, provider);
+    } else if (e.code !== "auth/popup-closed-by-user") {
+      erreur("Connexion impossible : " + e.code);
+    }
+  }
+};
+getRedirectResult(auth).catch(e => erreur("Connexion impossible : " + e.code));
+$("btn-logout").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  const connecte = !!user;
+  $("btn-login").hidden = connecte;
+  $("btn-logout").hidden = !connecte;
+  $("form").hidden = !connecte;
+  $("user").hidden = !connecte;
+  $("user").textContent = connecte ? (user.displayName || user.email) + " " : "";
+  if (stopEcoute) { stopEcoute(); stopEcoute = null; }
+  if (connecte) ecouterAnnonces();
+  else $("liste").innerHTML = '<p class="vide">Connecte-toi pour voir les annonces.</p>';
+});
+
+function ecouterAnnonces() {
+  const q = query(collection(db, "objets"), orderBy("date", "desc"), limit(50));
+  stopEcoute = onSnapshot(q, snap => {
+    const liste = $("liste");
+    liste.innerHTML = "";
+    if (snap.empty) { liste.innerHTML = '<p class="vide">Aucune annonce pour le moment. Publie la première.</p>'; return; }
+    snap.forEach(d => {
+      const a = d.data();
+      const el = document.createElement("article");
+      el.className = "annonce " + a.type;
+      const h = document.createElement("h3");
+      h.textContent = (a.type === "perdu" ? "Perdu : " : "Trouvé : ") + a.titre;
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = a.lieu + " · par " + a.auteur;
+      const p = document.createElement("p");
+      p.textContent = a.description || "";
+      el.append(h, m, p);
+      liste.append(el);
+    });
+  }, e => erreur("Lecture impossible : " + e.code));
+}
+
+$("form").onsubmit = async ev => {
+  ev.preventDefault();
+  erreur();
+  const u = auth.currentUser;
+  if (!u) return;
+  try {
+    await addDoc(collection(db, "objets"), {
+      type: $("type").value,
+      titre: $("titre").value.trim(),
+      lieu: $("lieu").value.trim(),
+      description: $("description").value.trim(),
+      auteur: u.displayName || "Anonyme",
+      uid: u.uid,
+      date: serverTimestamp()
+    });
+    ev.target.reset();
+  } catch (e) { erreur("Publication impossible : " + e.code); }
+};
+</script>
+</body>
+</html>
 
