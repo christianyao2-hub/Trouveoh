@@ -60,8 +60,8 @@ nav{box-shadow:0 -4px 16px rgba(0,0,0,.06)}nav button.on b{background:rgba(249,1
 .cb.go{background:#00a884;color:#fff;border:0}
 .sheet{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .sheet>div{background:var(--card);color:var(--tx);width:100%;max-width:520px;border-radius:22px 22px 0 0;padding:18px;display:grid;gap:10px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
-</style><script src="firebase-config.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script></head>
-<body><div id="app"><header><span id="hl"></span><span>Trouvéoh</span><span id="gpsb" class="gps"></span></header><div id="main"></div><nav id="nav"></nav></div>
+.gt{padding:10px 4px;font-size:12px;border-radius:14px}.gt b{font-size:22px;margin-bottom:2px}</style><script src="firebase-config.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script></head>
+<body><div id="app"><header><span id="hl"></span><span>Trouvéoh</span><span id="gpsb" class="gps" onclick="gpsT()" style="cursor:pointer"></span></header><div id="main"></div><nav id="nav"></nav></div>
 <script>
 var $=function(i){return document.getElementById(i)},db,uid,me,pdoc,boot=Date.now(),tab=0,cur=null,fail=0,pos=null,pimg="",pt="",q="",flt="all",vil="",rad=5,onDel=function(){location.reload()};
 var S={items:[],dir:{},msgs:[],ph:[],ev:[],sv:[],inf:[],cm:[],r1:0,r2:0,pr:{favs:[],blocked:[],seen:{},ville:"",pts:0,scores:{},md:"",mk:[]}};
@@ -106,7 +106,6 @@ function saveE(c,id){var t=$("et").value.trim();if(!t){toast("Titre obligatoire"
 function addC(id){var t=$("cm").value.trim();if(!t||!need())return;$("cm").value="";db.collection("comments").add({iid:id,aid:uid,t:t.slice(0,500),ts:Date.now()}).catch(function(){toast("Commentaire impossible")})}
 function delC(id){db.doc("comments/"+id).delete()}
 function setSt(id,v){db.doc("items/"+id).update({st:v});if(v=="returned")addPts(20,"objet restitué")}
-function delItem(c,id){if(confirm("Supprimer cette annonce ?")){db.doc(c+"/"+id).delete();cur=null}}
 function report(id){if(!need())return;var r=prompt("Motif du signalement ?");if(!r)return;db.collection("reports").add({iid:id,aid:uid,reason:r.slice(0,300),ts:Date.now()}).then(function(){toast("Merci, signalement envoyé")})}
 function pub(m){
  if(!uid){m.innerHTML='<div class="card" style="text-align:center"><p>Connectez-vous pour publier une annonce.</p>'+(typeof gsign=="function"?'<button class="btn" style="margin-top:12px" onclick="gsign()">Continuer avec Google</button>':"")+'</div>';return}
@@ -122,8 +121,7 @@ function map(m){
  var R=rad,W=300,pins="";
  if(pos){pins=vis().filter(function(i){return i.lat&&i.st!="returned"}).map(function(i){var dx=(i.lng-pos.lng)*Math.cos(pos.lat*Math.PI/180)*111.3,dy=(i.lat-pos.lat)*111.3;if(Math.sqrt(dx*dx+dy*dy)>R)return "";return '<circle cx="'+(150+dx/R*130)+'" cy="'+(150-dy/R*130)+'" r="7" fill="'+(i.type=="lost"?"#e11d48":"#059669")+'" onclick="cur=\''+i.id+'\';tab=0;draw()" style="cursor:pointer"/>'}).join("")}
  var pl=S.ph.filter(function(p){return!vil||p.ville==vil});
- m.innerHTML='<div class="row" style="margin-bottom:10px"><input id="mq" placeholder="🔎 Rechercher un lieu…" oninput="mqs()" style="margin:0"><a id="mqa" href="https://www.google.com/maps/search/" target="_blank" rel="noopener"><button class="btn sm">Maps</button></a><label class="chip" style="cursor:pointer;font-size:20px;padding:6px 12px">📷<input type="file" accept="image/*" style="display:none" onchange="photoSearch(this)"></label></div><div id="psr"></div><h2 style="margin:6px 0 8px">Lieux autour de moi</h2>'+lg()+'<h3 style="margin:14px 0 8px">Annonces proches</h3>'+(pos?'<div class="row" style="margin-bottom:8px"><select style="margin:0" onchange="rad=+this.value;draw()">'+[1,5,20].map(function(k){return '<option value="'+k+'"'+(rad==k?" selected":"")+'>Rayon '+k+' km</option>'}).join("")+'</select></div><div class="card"><svg viewBox="0 0 300 300" width="100%"><circle cx="150" cy="150" r="130" fill="none" stroke="var(--bd)"/><circle cx="150" cy="150" r="65" fill="none" stroke="var(--bd)"/><text x="154" y="88">'+(R/2)+' km</text><text x="154" y="22">'+R+' km</text><circle cx="150" cy="150" r="6" fill="var(--pri)"/>'+pins+'</svg><p class="mut">🔴 perdu · 🟢 trouvé · 🟠 vous. Touchez un point pour ouvrir l’annonce.</p></div>':'<div class="card" style="text-align:center"><p class="mut" style="margin-bottom:10px">Activez la position pour voir les annonces proches. Sinon, filtrez par ville dans l’accueil.</p>'+gpsBtn(0)+'</div>')+
- '<h3 style="margin:14px 0 8px">💊 Pharmacies de garde</h3>'+(pl.length?pl.map(function(p){return '<div class="card"><b>'+esc(p.name)+'</b><p class="mut">'+esc(p.addr)+' · '+esc(p.ville)+'</p><p>Garde : '+esc(p.garde)+'</p><p class="mut">Vérifié le '+esc(p.verified)+'</p><div class="row" style="margin-top:8px"><a href="tel:'+esc(p.tel)+'" style="flex:1"><button class="btn sm" style="width:100%">📞 Appeler</button></a><a href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(p.name+" "+p.addr+" "+p.ville)+'" target="_blank" rel="noopener" style="flex:1"><button class="btn sec sm" style="width:100%">🧭 Itinéraire</button></a></div></div>'}).join(""):'<div class="card"><p class="mut">Aucune pharmacie de garde enregistrée pour le moment. Les horaires ne sont publiés qu’après vérification.</p><a href="https://www.google.com/maps/search/pharmacie+de+garde" target="_blank" rel="noopener"><button class="btn sec sm" style="margin-top:8px">Chercher sur Google Maps</button></a></div>');
+ m.innerHTML='<div class="row" style="margin-bottom:10px"><input id="mq" placeholder="🔎 Rechercher un lieu…" onkeydown="if(event.key===\'Enter\')mapSearch()" style="margin:0"><button class="chip" style="font-size:18px;padding:6px 12px" onclick="mapSearch()">🔎</button><label class="chip" style="cursor:pointer;font-size:20px;padding:6px 12px">📷<input type="file" accept="image/*" style="display:none" onchange="photoSearch(this)"></label></div><div id="psr"></div><h2 style="margin:6px 0 8px">Lieux autour de moi</h2>'+lg()+'<h3 style="margin:14px 0 8px">Annonces proches</h3>'+(pos?'<div class="row" style="margin-bottom:8px"><select style="margin:0" onchange="rad=+this.value;draw()">'+[1,5,20].map(function(k){return '<option value="'+k+'"'+(rad==k?" selected":"")+'>Rayon '+k+' km</option>'}).join("")+'</select></div><div class="card"><svg viewBox="0 0 300 300" width="100%"><circle cx="150" cy="150" r="130" fill="none" stroke="var(--bd)"/><circle cx="150" cy="150" r="65" fill="none" stroke="var(--bd)"/><text x="154" y="88">'+(R/2)+' km</text><text x="154" y="22">'+R+' km</text><circle cx="150" cy="150" r="6" fill="var(--pri)"/>'+pins+'</svg><p class="mut">🔴 perdu · 🟢 trouvé · 🟠 vous. Touchez un point pour ouvrir l’annonce.</p></div>':'<div class="card" style="text-align:center"><p class="mut" style="margin-bottom:10px">Activez la position pour voir les annonces proches. Sinon, filtrez par ville dans l’accueil.</p>'+gpsBtn(0)+'</div>');
 }
 function pk(o){return[uid,o].sort().join("_")}
 function openPM(o){if(!need())return;tab=3;cur="pm:"+o;draw()}
@@ -131,9 +129,9 @@ function blk(o){if(confirm("Bloquer cet utilisateur ?")){S.pr.blocked.push(o);sp
 function prof(m){
  if(px)return outil(m);
  if(cur!==null&&String(cur).indexOf("pm:")!=0)return detail(m);
- if(!uid){m.innerHTML='<div class="card" style="text-align:center"><p>Connectez-vous pour accéder à votre profil.</p>'+(typeof gsign=="function"?'<button class="btn" style="margin:12px 0" onclick="gsign()">Continuer avec Google</button>':"")+'</div>'+og()+'<button class="btn sec" onclick="theme()">🎨 Thème : '+tl()+'</button>';return}
+ if(!uid){m.innerHTML='<div class="card" style="text-align:center"><p>Connectez-vous pour accéder à votre profil.</p>'+(typeof gsign=="function"?'<button class="btn" style="margin:12px 0" onclick="gsign()">Continuer avec Google</button>':"")+'</div>'+og()+'<button class="btn sec" onclick="theme()">🎨 Thème : '+tl()+'</button>'+langSel()+'';return}
  var d=S.dir[uid],mine=allp().filter(function(x){return x.aid==uid});
- m.innerHTML='<div class="av">'+(d.photo?'<img src="'+d.photo+'">':"👤")+'</div><div class="row" style="justify-content:center;margin-bottom:14px"><label class="chip" style="cursor:pointer">Modifier la photo<input type="file" accept="image/*" id="ph" style="display:none"></label></div><div class="card" oninput="saveP()"><label>Nom</label><input id="pn" value="'+esc(d.name)+'"><label>Ville</label><input id="pvl" value="'+esc(d.ville||"")+'"><p class="mut" id="sd">Enregistrement automatique</p></div>'+og()+'<h3 style="margin:6px 0 8px">Mes annonces ('+mine.length+')</h3>'+(mine.length?mine.map(card).join(""):'<p class="mut" style="margin-bottom:12px">Vous n’avez rien publié.</p>')+'<button class="btn sec" style="margin-bottom:8px" onclick="theme()">🎨 Thème : '+tl()+'</button><button class="btn sec" style="margin-bottom:8px" onclick="share()">📤 Partager Trouvéoh</button>'+(typeof fa!="undefined"?'<button class="btn sec" style="margin-bottom:8px" onclick="fa.signOut()">Se déconnecter</button>':"")+'<details style="margin-top:14px"><summary class="mut" style="cursor:pointer;padding:8px 0">⚙️ Paramètres avancés</summary><button class="btn sec" style="border-color:var(--lost);color:var(--lost);margin-top:8px" onclick="askDel()">Supprimer mon compte…</button></details>';
+ m.innerHTML='<div class="av">'+(d.photo?'<img src="'+d.photo+'">':"👤")+'</div><div class="row" style="justify-content:center;margin-bottom:14px"><label class="chip" style="cursor:pointer">Modifier la photo<input type="file" accept="image/*" id="ph" style="display:none"></label></div><div class="card" oninput="saveP()"><label>Nom</label><input id="pn" value="'+esc(d.name)+'"><label>Ville</label><input id="pvl" value="'+esc(d.ville||"")+'"><p class="mut" id="sd">Enregistrement automatique</p></div>'+og()+'<h3 style="margin:6px 0 8px">Mes annonces ('+mine.length+')</h3>'+(mine.length?mine.map(card).join(""):'<p class="mut" style="margin-bottom:12px">Vous n’avez rien publié.</p>')+'<button class="btn sec" style="margin-bottom:8px" onclick="theme()">🎨 Thème : '+tl()+'</button>'+langSel()+'<button class="btn sec" style="margin-bottom:8px" onclick="share()">📤 Partager Trouvéoh</button>'+(typeof fa!="undefined"?'<button class="btn sec" style="margin-bottom:8px" onclick="fa.signOut()">Se déconnecter</button>':"")+'<details style="margin-top:14px"><summary class="mut" style="cursor:pointer;padding:8px 0">⚙️ Paramètres avancés</summary><button class="btn sec" style="border-color:var(--lost);color:var(--lost);margin-top:8px" onclick="askDel()">Supprimer mon compte…</button></details>';
  $("ph").onchange=function(e){var f=e.target.files[0];if(f)shrink(f,200,function(u){db.doc("directory/"+uid).set(Object.assign({},S.dir[uid],{photo:u}))})};
 }
 function tl(){var t;try{t=localStorage.getItem("tv")}catch(e){}return t=="light"?"clair":t=="dark"?"sombre":"automatique"}
@@ -158,7 +156,7 @@ function svV(){return lst(S.sv,"Services et annonces locales","cat","services")+
 function sps(x){return x.sp&&(!x.spu||x.spu>=today())?1:0}
 function delX(c,id){if(confirm("Supprimer cette fiche ?"))db.doc(c+"/"+id).delete()}
 function lead(){if(!need())return;var n=prompt("Nom de votre établissement ?");if(!n)return;var t=prompt("Téléphone pour vous joindre ?");if(!t)return;db.collection("leads").add({name:n.slice(0,80),tel:t.slice(0,30),aid:uid,ts:Date.now()}).then(function(){toast("Demande envoyée ✓")})}
-var EVC=["Concert","Conférence","Église / Mosquée","Communautaire","Sport","Loisirs","Autre"],INC=["Pharmacie de garde","Santé","Transport","Sécurité","Administration","Marché / prix","Autre"];
+var EVC=["Concert","Conférence","Église / Mosquée","Communautaire","Sport","Loisirs","Autre"],INC=["Pharmacie","Santé","Transport","Sécurité","Administration","Marché / prix","Autre"];
 function pubX(m){var ev=pt=="event";m.innerHTML='<button class="back" onclick="pt=\'\';draw()">← Changer</button><div class="card"><span class="tag found">'+(ev?"Événement":"Renseignement")+'</span><div style="height:10px"></div><label>Titre</label><input id="xt" maxlength="80"><label>Catégorie</label><select id="xc">'+(ev?EVC:INC).map(function(c){return '<option>'+c+'</option>'}).join("")+'</select><label>Description</label><textarea id="xd" rows="3" maxlength="500"></textarea><label>Ville</label><input id="xv" value="'+esc(S.pr.ville||"")+'">'+(ev?'<label>Date</label><input id="xdt" type="date">':"")+'<label>Téléphone (facultatif)</label><input id="xp" type="tel"><p class="mut" style="margin-bottom:10px">Les fiches sont visibles de tous et peuvent être signalées.</p><button class="btn" onclick="postX()">Publier</button></div>'}
 function postX(){var t=$("xt").value.trim(),v=$("xv").value.trim(),ev=pt=="event",d=ev?$("xdt").value:today();if(!t||!v||!d){toast("Titre, ville et date obligatoires");return}
  db.collection(ev?"events":"infos").add({title:t,cat:$("xc").value,desc:$("xd").value.trim(),ville:v,date:d,tel:$("xp").value.trim(),aid:uid,ts:Date.now()}).then(function(){toast("Publié ✓")},function(){toast("Publication impossible : droits insuffisants")});
@@ -241,7 +239,7 @@ var GL=[["ttt","⭕","Morpion","Alignez 3 symboles (ligne, colonne ou diagonale)
 ["cm","➕","Calcul mental","Résolvez 5 calculs de tête et saisissez le résultat. 4 bonnes réponses minimum pour gagner.",newCm,cmV],
 ["mt","🔤","Mots mélangés","Remettez les lettres dans l’ordre pour retrouver le mot. 5 mots, 4 bons minimum pour gagner.",newMt,mtV]];
 function gameV(){
- if(!gm)return '<h2 style="margin:0 0 14px">Jeux</h2><div class="grid">'+GL.map(function(g){return '<div class="tile" onclick="gm=\''+g[0]+'\';gr=1;draw()"><b>'+g[1]+'</b>'+g[2]+(S.pr.scores[g[0]]!==undefined?'<div class="mut">Record : '+S.pr.scores[g[0]]+'</div>':"")+'</div>'}).join("")+'</div><p class="mut" style="margin-top:12px">Victoire = +5 points. Vos records sont enregistrés sur votre profil.</p>';
+ if(!gm)return '<h2 style="margin:0 0 14px">Jeux</h2><div class="grid" style="grid-template-columns:repeat(3,1fr);gap:10px">'+GL.map(function(g){return '<div class="tile gt" onclick="gm=\''+g[0]+'\';gr=1;draw()"><b>'+g[1]+'</b>'+g[2]+(S.pr.scores[g[0]]!==undefined?'<div class="mut">Record : '+S.pr.scores[g[0]]+'</div>':"")+'</div>'}).join("")+'</div><p class="mut" style="margin-top:12px">Victoire = +5 points. Vos records sont enregistrés sur votre profil.</p>';
  var g=GL.filter(function(x){return x[0]==gm})[0];
  if(gr)return '<button class="back" onclick="gm=\'\';gr=0;draw()">← Jeux</button><div class="card"><div style="font-size:44px;text-align:center">'+g[1]+'</div><h2 style="text-align:center;margin:6px 0">'+g[2]+'</h2><b>Comment jouer ?</b><p style="margin:6px 0 14px">'+g[3]+'</p><button class="btn" onclick="gr=0;GL.filter(function(x){return x[0]==gm})[0][4]();draw()">▶️ Commencer</button></div>';
  return '<button class="back" onclick="gm=\'\';draw()">← Jeux</button>'+g[5]()}
@@ -252,7 +250,9 @@ function ptsV(){var MS=[["pub","Publier une annonce"],["game","Gagner une partie
  return '<div class="card" style="text-align:center"><div style="font-size:34px">🏅</div><h2>'+(S.pr.pts||0)+' points</h2><p>Niveau : <b>'+lvl()+'</b></p><p class="mut">Débutant → Chercheur (50) → Détective (150) → Expert (400) → Maître Trouvéoh (1000)</p></div><div class="card"><b>Missions du jour (+5 points)</b>'+MS.map(function(x){return '<p>'+(S.pr.md==t&&S.pr.mk.indexOf(x[0])>=0?"✅":"⬜")+' '+x[1]+'</p>'}).join("")+'</div><div class="card"><b>Classement</b>'+lb.map(function(x,i){return '<p>'+(i+1)+'. '+esc(nm(x[0]))+' — '+x[1]+'</p>'}).join("")+'<p class="mut" style="margin-top:6px">+10 publication · +20 objet restitué · +5 victoire ou mission.</p></div>'+(uid?"":'<p class="mut">Connectez-vous pour gagner des points.</p>')}
 var LC=[["💊","Pharmacies","pharmacie",'["amenity"="pharmacy"]'],["🏥","Hôpitaux","hôpital clinique",'["amenity"~"hospital|clinic"]'],["🛒","Marchés","marché",'["amenity"="marketplace"]'],["🍽️","Restaurants","restaurant",'["amenity"="restaurant"]'],["🏨","Hôtels","hôtel",'["tourism"="hotel"]'],["🏬","Centres commerciaux","centre commercial",'["shop"="mall"]'],["🕌","Mosquées","mosquée",'["amenity"="place_of_worship"]["religion"="muslim"]'],["⛪","Églises","église",'["amenity"="place_of_worship"]["religion"="christian"]'],["🎡","Parcs d’attractions","parc d'attractions",'["tourism"="theme_park"]'],["🏛️","Musées","musée",'["tourism"="museum"]'],["🏫","Écoles","école",'["amenity"="school"]'],["🎓","Universités","université",'["amenity"="university"]'],["🏦","Banques et DAB","banque distributeur",'["amenity"~"bank|atm"]'],["⛽","Stations-service","station-service",'["amenity"="fuel"]'],["🅿️","Parkings","parking",'["amenity"="parking"]'],["🌳","Parcs et lieux publics","parc jardin lieu public",'["leisure"="park"]'],["🚓","Police","commissariat police",'["amenity"="police"]'],["🛍️","Shopping","magasin boutique",'["shop"]']];
 function mu(i){return "https://www.google.com/maps/search/"+encodeURIComponent(LC[i][2]+(pos?"":" "+(S.pr.ville||"")))+(pos?"/@"+pos.lat+","+pos.lng+",14z":"")}
-function lg(){return '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px">'+LC.map(function(c,i){return '<a class="tile" style="padding:12px 2px;font-size:12px;text-decoration:none;color:inherit;display:block" href="'+mu(i)+'" target="_blank" rel="noopener"><b style="font-size:24px">'+c[0]+'</b>'+c[1]+'</a>'}).join("")+'</div><p class="mut" style="margin:8px 0">Touchez une catégorie : Google Maps s’ouvre directement autour de vous.</p>'}
+function phOpt(){var q=function(t){return "https://www.google.com/maps/search/"+encodeURIComponent(t+(pos?"":" "+(S.pr.ville||"")))+(pos?"/@"+pos.lat+","+pos.lng+",14z":"")},s=document.createElement("div");s.className="sheet";s.id="phs";s.onclick=function(e){if(e.target==s)s.remove()};
+ s.innerHTML='<div><h3>💊 Pharmacie</h3><a href="'+q("pharmacie")+'" target="_blank" rel="noopener" style="text-decoration:none"><button class="btn" style="width:100%">Pharmacies proches</button></a><a href="'+q("pharmacie de garde")+'" target="_blank" rel="noopener" style="text-decoration:none"><button class="btn" style="width:100%">🌙 Pharmacies de garde</button></a><p class="mut">Vérifiez toujours les horaires de garde en appelant la pharmacie.</p><button class="btn sec" onclick="$(\'phs\').remove()">Fermer</button></div>';document.body.appendChild(s);trN(s)}
+function lg(){return '<div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px">'+LC.map(function(c,i){return '<a class="tile" style="padding:12px 2px;font-size:12px;text-decoration:none;color:inherit;display:block" '+(i==0?'href="#" onclick="phOpt();return false"':'href="'+mu(i)+'" target="_blank" rel="noopener"')+'><b style="font-size:24px">'+c[0]+'</b>'+c[1]+'</a>'}).join("")+'</div><p class="mut" style="margin:8px 0">Touchez une catégorie : Google Maps s’ouvre directement autour de vous.</p>'}
 function lq(){return '<div class="chips" style="overflow-x:auto;margin-top:0">'+LC.slice(0,6).map(function(c,i){return '<button class="chip" style="flex:none;white-space:nowrap" onclick="near('+i+')">'+c[0]+' '+c[1]+'</button>'}).join("")+'<button class="chip" style="flex:none" onclick="go(2)">Tout voir ›</button></div>'}
 function near(i){window.open("https://www.google.com/maps/search/"+encodeURIComponent(LC[i][2]+(pos?"":" "+(S.pr.ville||"")))+(pos?"/@"+pos.lat+","+pos.lng+",14z":""),"_blank")}
 var lxi=-1,lxr=[],lxl=0,lxk=3,lxe="";
@@ -268,18 +268,13 @@ function lxGo(i){lxi=i;lxl=1;lxe="";lxr=[];draw();
 var failMsg="",booted=0,am="in",mfl="all",rc=null,rch=[],rto2,lpt;
 var LOGO='<svg viewBox="0 0 64 64" width="32" height="32"><defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#lg1)"/><path d="M32 11c-9 0-16.500 7.100-16.500 16 0 11.700 16.500 26 16.500 26s16.500-14.300 16.500-26c0-8.900-7.500-16-16.500-16z" fill="#fff"/><circle cx="30" cy="27" r="7" fill="none" stroke="#ea580c" stroke-width="3.500"/><path d="M35 32l6.500 6.500" stroke="#ea580c" stroke-width="3.500" stroke-linecap="round"/></svg>';
 (function(){var h=$("hl");if(h)h.innerHTML=LOGO})();
-function fd(t){if(!t)return"—";var d=new Date(t);return d.toLocaleDateString("fr-FR",{day:"numeric",month:"short",year:"numeric"})+" à "+d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}
-function gpsOk(){return '<p class="mut" style="margin:6px 0 10px">✅ GPS déjà activé</p>'}
-function gpsBtn(sm){return '<div id="gpsw">'+(pos?gpsOk():'<button class="btn'+(sm?' sec sm':'')+'" style="margin-bottom:8px" onclick="locate(gpsDone)">📡 Activer ma position</button>')+'</div>'}
-function gpsDone(){var g=$("gpsw");if(g)g.innerHTML=gpsOk();toast("GPS activé ✓");if(tab==2)draw()}
-function gpsInit(){try{if(navigator.permissions&&navigator.permissions.query){navigator.permissions.query({name:"geolocation"}).then(function(r){if(r.state=="granted")locate(function(){ref()});r.onchange=function(){if(r.state=="granted")locate(function(){ref()});else{pos=null;draw()}}}).catch(function(){})}}catch(e){}}
 function nn(s,l){s.docChanges().forEach(function(c){if(c.type=="added"){var x=c.doc.data();if(uid&&x.ts>boot&&x.aid!=uid)notify(l+" : "+x.title)}})}
 function gate(m){var fb=typeof authGo=="function";
  m.innerHTML='<div class="login"><div style="width:84px;margin:0 auto 8px">'+LOGO.replace('width="32" height="32"','width="84" height="84"')+'</div><h1>Trouvéoh</h1><p class="mut" style="margin-bottom:18px">Connectez-vous pour accéder à l’application. Sans compte, seuls les jeux sont disponibles.</p>'+
  (fb?'<div class="card" style="text-align:left"><div class="chips" style="margin:0 0 10px"><button class="chip '+(am=="in"?"on":"")+'" onclick="am=\'in\';draw()">Se connecter</button><button class="chip '+(am=="new"?"on":"")+'" onclick="am=\'new\';draw()">Créer un compte</button></div><label>Nom, numéro ou e-mail</label><input id="li" autocomplete="username" placeholder="Ex. : Awa Koné ou 0700000000"><label>Mot de passe (6 caractères minimum)</label><input id="lp" type="password" autocomplete="'+(am=="new"?"new-password":"current-password")+'"><button class="btn" onclick="authGo(am)">'+(am=="new"?"Créer mon compte":"Se connecter")+'</button>'+(am=="in"?'<p class="mut" style="margin-top:10px"><a href="#" onclick="resetPw();return false" style="color:var(--pri)">Mot de passe oublié ?</a></p>':"")+'</div><p class="mut" style="margin:6px 0 10px">ou</p><button class="btn sec" onclick="gsign()">Continuer avec Google</button>':'<div class="card"><p class="mut">Ouvrez Trouvéoh depuis votre compte pour continuer.</p></div>')+
  '<button class="chip" style="margin-top:20px" onclick="go(4)">🎮 Jouer sans compte</button></div>'}
 function draw(){
- var m=$("main"),n=$("nav");applyTheme();var gb=$("gpsb");if(gb)gb.textContent=pos?"📡 GPS activé":"";
+ var m=$("main"),n=$("nav");applyTheme();var gb=$("gpsb");if(gb)gb.textContent=pos?"📡 GPS activé":"📡 GPS désactivé";
  if(fail){n.style.display="none";m.innerHTML='<div class="login"><h1>Trouvéoh</h1><p class="mut">'+(failMsg||"Connexion impossible ou accès refusé. Vérifiez votre connexion et vos droits d’accès.")+'</p></div>';return}
  if(!booted||(uid&&(!S.r1||!S.r2))){n.style.display="none";m.innerHTML='<div class="login"><div style="width:84px;margin:0 auto 8px">'+LOGO.replace('width="32" height="32"','width="84" height="84"')+'</div><p class="mut">Chargement…</p></div>';return}
  if(uid&&!S.dir[uid]){n.style.display="none";m.innerHTML='<div class="login"><h1>Bienvenue</h1><p class="mut" style="margin-bottom:20px">Choisissez le nom affiché aux autres.</p><div class="card" style="text-align:left"><label>Nom</label><input id="on" value="'+esc(me&&me.name||"")+'"><label>Ville</label><input id="ov" placeholder="Ex. : Abidjan"><button class="btn" onclick="onb()">Commencer</button></div></div>';return}
@@ -298,7 +293,7 @@ function msgs(m){
  S.cm.filter(function(x){return x.aid!=uid&&mine[x.iid]}).forEach(function(x){L.push({k:"com",ts:x.ts,h:'<div class="card" style="cursor:pointer" onclick="cur=\''+x.iid+'\';ed=0;draw()"><b>💬 '+esc(nm(x.aid))+'</b> a commenté votre publication<p>'+esc(x.t)+'</p><p class="mut" style="font-size:11px">'+fd(x.ts)+'</p></div>'})});
  allp().filter(function(x){return S.pr.favs.indexOf(x.id)>=0}).forEach(function(x){L.push({k:"fav",ts:x.ts||0,h:card(x)})});
  var F=[["all","Tous"],["new","Nouveaux messages"],["com","Commentaires"],["fav","Favoris"]],l=L.filter(function(x){return mfl=="all"||x.k==mfl}).sort(function(a,b){return b.ts-a.ts});
- m.innerHTML='<div class="chips" style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin:0 0 8px;overflow-x:auto;box-shadow:0 3px 6px -4px rgba(0,0,0,.25)">'+F.map(function(f){return '<button class="chip '+(mfl==f[0]?"on":"")+'" style="flex:none" onclick="mfl=\''+f[0]+'\';draw()">'+f[1]+'</button>'}).join("")+'</div>'+(l.length?l.map(function(x){return x.h}).join(""):'<div class="card" style="text-align:center"><p class="mut">'+({new:"Aucun nouveau message.",com:"Aucun commentaire sur vos publications.",fav:"Aucun favori. Touchez ♡ sur une publication."}[mfl]||"Aucune conversation. Ouvrez une publication et touchez « Contacter ».")+'</p></div>');
+ m.innerHTML=usrSearch()+'<div class="chips" style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin:0 0 8px;overflow-x:auto;box-shadow:0 3px 6px -4px rgba(0,0,0,.25)">'+F.map(function(f){return '<button class="chip '+(mfl==f[0]?"on":"")+'" style="flex:none" onclick="mfl=\''+f[0]+'\';draw()">'+f[1]+'</button>'}).join("")+'</div>'+(l.length?l.map(function(x){return x.h}).join(""):'<div class="card" style="text-align:center"><p class="mut">'+({new:"Aucun nouveau message.",com:"Aucun commentaire sur vos publications.",fav:"Aucun favori. Touchez ♡ sur une publication."}[mfl]||"Aucune conversation. Ouvrez une publication et touchez « Contacter ».")+'</p></div>');
 }
 function bub(x){var me=x.from==uid,b=x.k=="img"?'<img src="'+x.d+'">':x.k=="aud"?'<audio controls src="'+x.d+'"></audio>':x.k=="file"?'<a href="'+x.d+'" download="'+esc(x.fn||"fichier")+'" style="color:inherit">📎 '+esc(x.fn||"fichier")+'</a>':esc(x.t);return '<div class="wb'+(me?" me":"")+'">'+b+'<small>'+new Date(x.ts).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})+(me?" ✓":"")+'</small></div>'}
 function chat(m){var o=cur.slice(3),l=S.msgs.filter(function(x){return x.pair==pk(o)}).sort(function(a,b){return a.ts-b.ts}),last=l.length?l[l.length-1].ts:0;
@@ -323,9 +318,8 @@ function cmt(c){var me=c.aid==uid;return '<div class="msg'+(me?" me":"")+'"'+(me
 function cmenu(id){var c=S.cm.filter(function(x){return x.id==id})[0];if(!c||c.aid!=uid)return;var age=Date.now()-c.ts,ce=age<=18e5,cd=age<=1728e5,s=document.createElement("div");s.className="sheet";s.id="csh";s.onclick=function(e){if(e.target==s)s.remove()};
  s.innerHTML='<div><b>Votre commentaire</b><button class="btn sec" '+(ce?"":'disabled style="opacity:.45"')+' onclick="cedit(\''+id+'\')">✏️ Modifier'+(ce?" (30 min max)":" — délai de 30 min dépassé")+'</button><button class="btn sec" style="color:var(--lost);border-color:var(--lost)'+(cd?"":";opacity:.45")+'" '+(cd?"":"disabled")+' onclick="cdel(\''+id+'\')">🗑️ Supprimer'+(cd?" (48 h max)":" — délai de 48 h dépassé")+'</button><button class="btn sec" onclick="$(\'csh\').remove()">Annuler</button></div>';document.body.appendChild(s)}
 function cedit(id){var s=$("csh");if(s)s.remove();var c=S.cm.filter(function(x){return x.id==id})[0];if(!c||Date.now()-c.ts>18e5){toast("Délai de 30 min dépassé");return}var v=prompt("Modifier votre commentaire",c.t);if(v&&v.trim()&&v.trim()!==c.t)db.doc("comments/"+id).update({t:v.trim().slice(0,500),ed:Date.now()}).catch(function(){toast("Modification impossible")})}
-function cdel(id){var s=$("csh");if(s)s.remove();var c=S.cm.filter(function(x){return x.id==id})[0];if(!c||Date.now()-c.ts>1728e5){toast("Délai de 48 h dépassé");return}if(confirm("Supprimer ce commentaire ? Cette action est définitive."))db.doc("comments/"+id).delete().catch(function(){toast("Suppression impossible")})}
 function askDel(){var s=document.createElement("div");s.className="sheet";s.id="dsh";s.innerHTML='<div><h3>Supprimer votre compte ?</h3><p class="mut">Vos publications et votre profil seront supprimés définitivement. Action irréversible.</p><label>Pourquoi souhaitez-vous partir ? (obligatoire)</label><select id="dr"><option value="">Choisir une raison…</option><option>Je n’utilise plus l’application</option><option>Trop de notifications</option><option>Problème de confidentialité</option><option>Je n’ai pas trouvé ce que je cherchais</option><option>Autre</option></select><input id="dc" placeholder="Tapez SUPPRIMER pour confirmer"><button class="btn red" onclick="delGo()">Supprimer définitivement</button><button class="btn sec" onclick="$(\'dsh\').remove()">Annuler</button></div>';document.body.appendChild(s)}
-function delGo(){var r=$("dr").value,c=$("dc").value.trim().toUpperCase();if(!r){toast("Indiquez une raison");return}if(c!=="SUPPRIMER"){toast("Tapez SUPPRIMER pour confirmer");return}db.collection("deletions").add({reason:r,ts:Date.now()}).catch(function(){});$("dsh").remove();delAll(1)}
+function delGo(){var r=$("dr").value,c=$("dc").value.trim().toUpperCase();if(!r){toast("Indiquez une raison");return}if(["SUPPRIMER","DELETE","ELIMINAR","删除"].indexOf(c)<0){toast("Tapez SUPPRIMER pour confirmer");return}db.collection("deletions").add({reason:r,ts:Date.now()}).catch(function(){});$("dsh").remove();delAll(1)}
 function mqs(){var a=$("mqa");if(a)a.href="https://www.google.com/maps/search/"+encodeURIComponent($("mq").value)}
 function ah(src){return new Promise(function(r){var im=new Image();im.onload=function(){var c=document.createElement("canvas");c.width=c.height=8;var x=c.getContext("2d");x.drawImage(im,0,0,8,8);var d=x.getImageData(0,0,8,8).data,g=[],s=0;for(var i=0;i<64;i++){var v=(d[i*4]+d[i*4+1]+d[i*4+2])/3;g.push(v);s+=v}var a=s/64;r(g.map(function(v){return v>a?1:0}))};im.onerror=function(){r(null)};im.src=src})}
 function photoSearch(el){var f=el.files[0];el.value="";if(!f)return;shrink(f,400,function(u){var out=$("psr");out.innerHTML='<div class="card"><img class="thumb" src="'+u+'"><p class="mut">Analyse de la photo…</p></div>';
@@ -358,6 +352,396 @@ GL.push(["sn","🐍","Snake","Dirigez le serpent avec les flèches. Mangez les p
 ["sm","🎨","Simon","Mémorisez la suite de couleurs qui s’allume, puis reproduisez-la. Chaque niveau ajoute une couleur. Niveau 6 pour gagner.",newSm,smV],
 ["tp","🐹","Taupe","Touchez la taupe quand elle apparaît. 20 secondes. 10 taupes minimum pour gagner.",newTp,tpV],
 ["vf","✅","Vrai ou Faux","Répondez Vrai ou Faux à 5 affirmations. 4 bonnes réponses minimum pour gagner.",newVf,vfV]);
+var DICT=`💊 Pharmacie|💊 Pharmacy|💊 Farmacia|💊 药店
+Pharmacies proches|Nearby pharmacies|Farmacias cercanas|附近药店
+🌙 Pharmacies de garde|🌙 On-duty pharmacies|🌙 Farmacias de guardia|🌙 值班药店
+Vérifiez toujours les horaires de garde en appelant la pharmacie.|Always check the on-duty hours by calling the pharmacy.|Compruebe siempre el horario de guardia llamando a la farmacia.|请务必致电药店确认值班时间。
+Fermer|Close|Cerrar|关闭
+Accueil|Home|Inicio|首页
+Publier|Post|Publicar|发布
+Carte|Map|Mapa|地图
+Messages|Messages|Mensajes|消息
+Jeux|Games|Juegos|游戏
+Profil|Profile|Perfil|我的
+Tous|All|Todos|全部
+Perdus|Lost|Perdidos|丢失
+Trouvés|Found|Encontrados|拾到
+Events|Events|Eventos|活动
+Renseignements|Info|Información|信息
+Perdu|Lost|Perdido|丢失
+Trouvé|Found|Encontrado|拾到
+Ouvert|Open|Abierto|开放
+En recherche|Searching|En búsqueda|寻找中
+Restitué|Returned|Devuelto|已归还
+Nouveau|New|Nuevo|新
+Nouveaux messages|New messages|Mensajes nuevos|新消息
+Commentaires|Comments|Comentarios|评论
+Favoris|Favorites|Favoritos|收藏
+Annuler|Cancel|Cancelar|取消
+Supprimer|Delete|Eliminar|删除
+Envoyer|Send|Enviar|发送
+Ajouter|Add|Añadir|添加
+Autre|Other|Otro|其他
+Nom|Name|Nombre|姓名
+Ville|City|Ciudad|城市
+Titre|Title|Título|标题
+Description|Description|Descripción|描述
+Date|Date|Fecha|日期
+Catégorie|Category|Categoría|类别
+Photo (facultatif)|Photo (optional)|Foto (opcional)|照片（可选）
+Téléphone (facultatif)|Phone (optional)|Teléfono (opcional)|电话（可选）
+Téléphone|Phone|Teléfono|手机
+Portefeuille|Wallet|Cartera|钱包
+Clés|Keys|Llaves|钥匙
+Documents|Documents|Documentos|证件
+Sac|Bag|Bolso|包
+Vêtement|Clothing|Ropa|衣物
+Que voulez-vous publier ?|What do you want to post?|¿Qué quieres publicar?|你想发布什么？
+J’ai perdu un objet|I lost an item|He perdido un objeto|我丢了东西
+J’ai trouvé un objet|I found an item|He encontrado un objeto|我捡到东西
+Publier un événement|Post an event|Publicar un evento|发布活动
+Renseignement|Information|Información|信息
+Objet perdu|Lost item|Objeto perdido|丢失物品
+Événement|Event|Evento|活动
+Événements|Events|Eventos|活动
+Infos|Info|Info|信息
+Info|Info|Info|信息
+Outils|Tools|Herramientas|工具
+Lieux|Places|Lugares|地点
+Météo|Weather|Tiempo|天气
+Calculatrice|Calculator|Calculadora|计算器
+Tâches|Tasks|Tareas|任务
+Services|Services|Servicios|服务
+Points|Points|Puntos|积分
+Loisirs|Leisure|Ocio|休闲
+Lieux autour de moi|Places near me|Lugares cerca de mí|我附近的地点
+Annonces proches|Nearby posts|Anuncios cercanos|附近的发布
+Touchez une catégorie : Google Maps s’ouvre directement autour de vous.|Tap a category: Google Maps opens right around you.|Toca una categoría: Google Maps se abre directamente a tu alrededor.|点击类别：将直接在 Google 地图中打开您周围的地点。
+Données OpenStreetMap, disponibles partout dans le monde.|OpenStreetMap data, available worldwide.|Datos de OpenStreetMap, disponibles en todo el mundo.|OpenStreetMap 数据，全球可用。
+Pharmacies|Pharmacies|Farmacias|药店
+Pharmacie|Pharmacy|Farmacia|药店
+Hôpitaux|Hospitals|Hospitales|医院
+Marchés|Markets|Mercados|市场
+Restaurants|Restaurants|Restaurantes|餐厅
+Hôtels|Hotels|Hoteles|酒店
+Centres commerciaux|Shopping centers|Centros comerciales|购物中心
+Mosquées|Mosques|Mezquitas|清真寺
+Églises|Churches|Iglesias|教堂
+Parcs d’attractions|Theme parks|Parques de atracciones|游乐园
+Musées|Museums|Museos|博物馆
+Écoles|Schools|Escuelas|学校
+Universités|Universities|Universidades|大学
+Banques et DAB|Banks and ATMs|Bancos y cajeros|银行和取款机
+Stations-service|Gas stations|Gasolineras|加油站
+Parkings|Parking|Aparcamientos|停车场
+Parcs et lieux publics|Parks and public places|Parques y lugares públicos|公园和公共场所
+Police|Police|Policía|警察局
+Shopping|Shopping|Compras|购物
+Chercher sur Google Maps|Search on Google Maps|Buscar en Google Maps|在 Google 地图搜索
+Santé|Health|Salud|健康
+Transport|Transport|Transporte|交通
+Sécurité|Safety|Seguridad|安全
+Administration|Administration|Administración|行政
+Marché / prix|Market / prices|Mercado / precios|市场/价格
+Concert|Concert|Concierto|音乐会
+Conférence|Conference|Conferencia|会议
+Communautaire|Community|Comunitario|社区
+Sport|Sports|Deporte|体育
+Église / Mosquée|Church / Mosque|Iglesia / Mezquita|教堂/清真寺
+Personnel|Personal|Personal|个人
+Travail|Work|Trabajo|工作
+Courses|Errands|Recados|购物清单
+Modifier la photo|Change photo|Cambiar foto|更换照片
+Enregistrement automatique|Saved automatically|Guardado automáticamente|自动保存
+✓ Enregistré|✓ Saved|✓ Guardado|✓ 已保存
+📤 Partager Trouvéoh|📤 Share Trouvéoh|📤 Compartir Trouvéoh|📤 分享 Trouvéoh
+⚙️ Paramètres avancés|⚙️ Advanced settings|⚙️ Ajustes avanzados|⚙️ 高级设置
+Supprimer mon compte…|Delete my account…|Eliminar mi cuenta…|删除我的账户…
+Supprimer votre compte ?|Delete your account?|¿Eliminar tu cuenta?|删除您的账户？
+Vos publications et votre profil seront supprimés définitivement. Action irréversible.|Your posts and profile will be permanently deleted. This cannot be undone.|Tus publicaciones y tu perfil se eliminarán definitivamente. Acción irreversible.|您的发布内容和个人资料将被永久删除，此操作无法撤销。
+Pourquoi souhaitez-vous partir ? (obligatoire)|Why are you leaving? (required)|¿Por qué quieres irte? (obligatorio)|您为什么要离开？（必填）
+Choisir une raison…|Choose a reason…|Elige una razón…|选择原因…
+Je n’utilise plus l’application|I no longer use the app|Ya no uso la aplicación|我不再使用该应用
+Trop de notifications|Too many notifications|Demasiadas notificaciones|通知太多
+Problème de confidentialité|Privacy concern|Problema de privacidad|隐私问题
+Je n’ai pas trouvé ce que je cherchais|I didn’t find what I was looking for|No encontré lo que buscaba|没有找到我想要的
+Supprimer définitivement|Delete permanently|Eliminar definitivamente|永久删除
+Tapez SUPPRIMER pour confirmer|Type DELETE to confirm|Escribe ELIMINAR para confirmar|输入“删除”以确认
+Motif (obligatoire)|Reason (required)|Motivo (obligatorio)|原因（必填）
+Erreur de ma part|My mistake|Error mío|我的失误
+Information incorrecte|Incorrect information|Información incorrecta|信息不正确
+Objet retrouvé / restitué|Item found / returned|Objeto encontrado / devuelto|物品已找到/归还
+Contenu inapproprié|Inappropriate content|Contenido inapropiado|内容不当
+Confirmer la suppression|Confirm deletion|Confirmar eliminación|确认删除
+Supprimer ce commentaire ?|Delete this comment?|¿Eliminar este comentario?|删除此评论？
+Supprimer cette publication ?|Delete this post?|¿Eliminar esta publicación?|删除此发布？
+← Retour|← Back|← Volver|← 返回
+← Changer|← Change|← Cambiar|← 更改
+← Jeux|← Games|← Juegos|← 游戏
+← Messages|← Messages|← Mensajes|← 消息
+← Profil|← Profile|← Perfil|← 返回我的
+✉️ Contacter|✉️ Contact|✉️ Contactar|✉️ 联系
+📞 Contacter|📞 Contact|📞 Contactar|📞 联系
+📞 Appeler|📞 Call|📞 Llamar|📞 拨打
+🗺️ Carte|🗺️ Map|🗺️ Mapa|🗺️ 地图
+🚩 Signaler|🚩 Report|🚩 Denunciar|🚩 举报
+🚫 Bloquer|🚫 Block|🚫 Bloquear|🚫 屏蔽
+Statut de l’annonce|Post status|Estado del anuncio|发布状态
+Seul l’auteur peut modifier cette annonce. Vous pouvez la commenter.|Only the author can edit this post. You can comment on it.|Solo el autor puede modificar este anuncio. Puedes comentarlo.|只有作者可以修改此发布，您可以发表评论。
+Aucun commentaire.|No comments.|Sin comentarios.|暂无评论。
+Appui long sur votre commentaire : modifier (30 min) ou supprimer (48 h).|Long-press your comment: edit (30 min) or delete (48 h).|Mantén pulsado tu comentario: editar (30 min) o eliminar (48 h).|长按您的评论：可编辑（30分钟内）或删除（48小时内）。
+Votre commentaire…|Your comment…|Tu comentario…|您的评论…
+Votre commentaire|Your comment|Tu comentario|您的评论
+🔎 Annonces qui pourraient correspondre|🔎 Posts that might match|🔎 Anuncios que podrían coincidir|🔎 可能匹配的发布
+À confirmer vous-même avec l’autre personne.|To be confirmed by you with the other person.|Confírmalo tú con la otra persona.|请自行与对方确认。
+✏️ Modifier|✏️ Edit|✏️ Editar|✏️ 编辑
+✏️ Modifier (30 min max)|✏️ Edit (30 min max)|✏️ Editar (30 min máx.)|✏️ 编辑（最长30分钟）
+🗑️ Supprimer (48 h max)|🗑️ Delete (48 h max)|🗑️ Eliminar (48 h máx.)|🗑️ 删除（最长48小时）
+a commenté votre publication|commented on your post|comentó tu publicación|评论了您的发布
+Aucune conversation. Ouvrez une publication et touchez « Contacter ».|No conversations. Open a post and tap “Contact”.|Sin conversaciones. Abre una publicación y toca «Contactar».|暂无对话。打开一条发布并点击“联系”。
+Aucun nouveau message.|No new messages.|Sin mensajes nuevos.|没有新消息。
+Aucun commentaire sur vos publications.|No comments on your posts.|Sin comentarios en tus publicaciones.|您的发布暂无评论。
+Aucun favori. Touchez ♡ sur une publication.|No favorites. Tap ♡ on a post.|Sin favoritos. Toca ♡ en una publicación.|暂无收藏。点击发布上的 ♡。
+Message|Message|Mensaje|消息
+Écrivez le premier message. Restez prudent : ne partagez pas d’informations sensibles.|Write the first message. Stay careful: don’t share sensitive information.|Escribe el primer mensaje. Ten cuidado: no compartas información sensible.|发送第一条消息。请注意安全：不要分享敏感信息。
+Connectez-vous pour accéder à l’application. Sans compte, seuls les jeux sont disponibles.|Sign in to use the app. Without an account, only games are available.|Inicia sesión para usar la aplicación. Sin cuenta, solo están disponibles los juegos.|请登录后使用。未登录时只能玩游戏。
+Se connecter|Sign in|Iniciar sesión|登录
+Créer un compte|Create an account|Crear una cuenta|注册
+Nom, numéro ou e-mail|Name, number or e-mail|Nombre, número o correo|姓名、号码或邮箱
+Mot de passe (6 caractères minimum)|Password (6 characters minimum)|Contraseña (mínimo 6 caracteres)|密码（至少6位）
+Créer mon compte|Create my account|Crear mi cuenta|创建我的账户
+Mot de passe oublié ?|Forgot password?|¿Olvidaste la contraseña?|忘记密码？
+ou|or|o|或
+Continuer avec Google|Continue with Google|Continuar con Google|使用 Google 继续
+🎮 Jouer sans compte|🎮 Play without an account|🎮 Jugar sin cuenta|🎮 无需账户即可游戏
+Ouvrez Trouvéoh depuis votre compte pour continuer.|Open Trouvéoh from your account to continue.|Abre Trouvéoh desde tu cuenta para continuar.|请从您的账户打开 Trouvéoh 继续。
+Chargement…|Loading…|Cargando…|加载中…
+Bienvenue|Welcome|Bienvenido|欢迎
+Choisissez le nom affiché aux autres.|Choose the name shown to others.|Elige el nombre que verán los demás.|请选择向他人显示的名称。
+Commencer|Start|Empezar|开始
+Signes distinctifs (gardez un détail secret)…|Distinctive features (keep one detail secret)…|Rasgos distintivos (guarda un detalle en secreto)…|特征描述（请保留一个秘密细节）…
+Ex. : Portefeuille noir|E.g.: Black wallet|Ej.: Cartera negra|例如：黑色钱包
+Ex. : Abidjan|E.g.: Abidjan|Ej.: Abiyán|例如：阿比让
+Publier cette annonce|Post this listing|Publicar este anuncio|发布此信息
+📡 Activer ma position|📡 Turn on my location|📡 Activar mi ubicación|📡 开启我的位置
+✅ GPS déjà activé · Désactiver|✅ GPS already on · Turn off|✅ GPS ya activado · Desactivar|✅ GPS 已开启 · 关闭
+📡 GPS activé|📡 GPS on|📡 GPS activado|📡 GPS 已开启
+📡 GPS désactivé|📡 GPS off|📡 GPS desactivado|📡 GPS 已关闭
+Votre position est arrondie (environ 1 km) et jamais exacte.|Your location is rounded (about 1 km) and never exact.|Tu ubicación se redondea (aprox. 1 km) y nunca es exacta.|您的位置会被模糊处理（约1公里），不会精确显示。
+Les fiches sont visibles de tous et peuvent être signalées.|Listings are visible to everyone and can be reported.|Las fichas son visibles para todos y pueden denunciarse.|信息对所有人可见，并可被举报。
+Téléphone|Phone|Teléfono|手机
+🔍 Rechercher : portefeuille noir, concert…|🔍 Search: black wallet, concert…|🔍 Buscar: cartera negra, concierto…|🔍 搜索：黑色钱包、音乐会…
+🏙️ Ville…|🏙️ City…|🏙️ Ciudad…|🏙️ 城市…
+🔍 Ville, catégorie, nom…|🔍 City, category, name…|🔍 Ciudad, categoría, nombre…|🔍 城市、类别、名称…
+🔎 Rechercher un lieu…|🔎 Search for a place…|🔎 Buscar un lugar…|🔎 搜索地点…
+👤 Rechercher un utilisateur par nom…|👤 Find a user by name…|👤 Buscar un usuario por nombre…|👤 按名称搜索用户…
+✉️ Écrire|✉️ Write|✉️ Escribir|✉️ 发消息
+Aucun utilisateur trouvé.|No user found.|Ningún usuario encontrado.|未找到用户。
+Aucun résultat.|No results.|Sin resultados.|没有结果。
+Recherche…|Searching…|Buscando…|搜索中…
+🧭 Itinéraire|🧭 Directions|🧭 Cómo llegar|🧭 路线
+Saisissez un lieu à rechercher|Enter a place to search|Escribe un lugar para buscar|请输入要搜索的地点
+Aucune publication pour le moment.|No posts yet.|Aún no hay publicaciones.|暂无发布。
+Menu|Menu|Menú|菜单
+Mes annonces|My posts|Mis anuncios|我的发布
+Vous n’avez rien publié.|You haven’t posted anything.|No has publicado nada.|您还没有发布任何内容。
+🎨 Thème : automatique|🎨 Theme: automatic|🎨 Tema: automático|🎨 主题：自动
+🎨 Thème : clair|🎨 Theme: light|🎨 Tema: claro|🎨 主题：浅色
+🎨 Thème : sombre|🎨 Theme: dark|🎨 Tema: oscuro|🎨 主题：深色
+🌐 Langue|🌐 Language|🌐 Idioma|🌐 语言
+Comment jouer ?|How to play?|¿Cómo se juega?|玩法
+▶️ Commencer|▶️ Start|▶️ Empezar|▶️ 开始
+Morpion|Tic-tac-toe|Tres en raya|井字棋
+Mémoire|Memory|Memoria|记忆
+Nombre mystère|Mystery number|Número misterioso|神秘数字
+Pierre-Feuille-Ciseaux|Rock-Paper-Scissors|Piedra, papel o tijera|石头剪刀布
+Quiz|Quiz|Quiz|问答
+Réflexe|Reflex|Reflejos|反应
+Calcul mental|Mental math|Cálculo mental|心算
+Mots mélangés|Word scramble|Palabras mezcladas|字母重组
+Snake|Snake|Serpiente|贪吃蛇
+Pendu|Hangman|Ahorcado|猜词
+Simon|Simon|Simón|西蒙
+Taupe|Whack-a-mole|Topo|打地鼠
+Vrai ou Faux|True or False|Verdadero o falso|对或错
+Dés|Dice|Dados|骰子
+Capitales|Capitals|Capitales|首都
+Suite logique|Number sequence|Serie lógica|数列
+Couleurs|Colors|Colores|颜色
+Victoire = +5 points. Vos records sont enregistrés sur votre profil.|Win = +5 points. Your records are saved to your profile.|Victoria = +5 puntos. Tus récords se guardan en tu perfil.|获胜 = +5 积分。您的纪录会保存到个人资料。
+Rejouer|Play again|Jugar de nuevo|再玩一次
+Nouvelle partie|New game|Nueva partida|新游戏
+Valider|Submit|Validar|确定
+Calcul|Calculate|Calcular|计算
+TVA|VAT|IVA|增值税
+Pourboire|Tip|Propina|小费
+Prêt|Loan|Préstamo|贷款
+Calculer|Calculate|Calcular|计算
+Aucune tâche.|No tasks.|Sin tareas.|暂无任务。
+Nouvelle tâche…|New task…|Nueva tarea…|新任务…
+Entrez une ville.|Enter a city.|Escribe una ciudad.|请输入城市。
+Services et annonces locales|Local services and ads|Servicios y anuncios locales|本地服务与广告
+⭐ Vous êtes un commerce ?|⭐ Are you a business?|⭐ ¿Eres un negocio?|⭐ 您是商家吗？
+Demandez à être mis en avant en haut des listes.|Ask to be featured at the top of the lists.|Solicita aparecer destacado al inicio de las listas.|申请在列表顶部展示。
+Faire une demande|Send a request|Hacer una solicitud|提交申请
+Classement|Leaderboard|Clasificación|排行榜
+Niveau :|Level:|Nivel:|等级：
+Débutant|Beginner|Principiante|新手
+Chercheur|Seeker|Buscador|探寻者
+Détective|Detective|Detective|侦探
+Expert|Expert|Experto|专家
+Maître Trouvéoh|Trouvéoh Master|Maestro Trouvéoh|Trouvéoh 大师
+Missions du jour (+5 points)|Daily missions (+5 points)|Misiones del día (+5 puntos)|每日任务（+5 积分）
+⬜ Publier une annonce|⬜ Post a listing|⬜ Publicar un anuncio|⬜ 发布一条信息
+⬜ Gagner une partie|⬜ Win a game|⬜ Ganar una partida|⬜ 赢一局游戏
+⬜ Ajouter une tâche|⬜ Add a task|⬜ Añadir una tarea|⬜ 添加一个任务
++10 publication · +20 objet restitué · +5 victoire ou mission.|+10 post · +20 item returned · +5 win or mission.|+10 publicación · +20 objeto devuelto · +5 victoria o misión.|+10 发布 · +20 物品归还 · +5 获胜或任务。
+Connectez-vous pour gagner des points.|Sign in to earn points.|Inicia sesión para ganar puntos.|登录后可赚取积分。
+Données de localisation et de météo.|Location and weather data.|Datos de ubicación y tiempo.|位置与天气数据。
+Alignez 3 symboles (ligne, colonne ou diagonale) avant l’ordinateur. Vous jouez ❌ et commencez : touchez une case vide.|Line up 3 symbols (row, column or diagonal) before the computer. You play ❌ and go first: tap an empty square.|Alinea 3 símbolos (fila, columna o diagonal) antes que el ordenador. Juegas con ❌ y empiezas: toca una casilla vacía.|在电脑之前连成3个符号（横、竖或斜）。您执❌先手：点击空格。
+Retournez deux cartes à la fois. Si elles sont identiques, elles restent visibles. Trouvez les 8 paires avec le moins de coups possible.|Flip two cards at a time. If they match, they stay visible. Find all 8 pairs in as few moves as possible.|Da la vuelta a dos cartas. Si son iguales, quedan visibles. Encuentra las 8 parejas con los menos movimientos posibles.|每次翻开两张牌。相同则保持显示。用尽量少的步数找出全部8对。
+Un nombre entre 1 et 100 est caché. Proposez un nombre : l’app indique « plus grand » ou « plus petit ». Trouvez-le en un minimum d’essais.|A number between 1 and 100 is hidden. Guess a number: the app tells you “higher” or “lower”. Find it in as few tries as possible.|Hay un número oculto entre 1 y 100. Propón un número: la app dice «más grande» o «más pequeño». Encuéntralo con los menos intentos posibles.|隐藏了一个1到100的数字。请猜一个数，应用会提示“大一点”或“小一点”。用最少的次数猜中。
+La pierre bat les ciseaux, les ciseaux battent la feuille, la feuille bat la pierre. Le premier à 5 points gagne.|Rock beats scissors, scissors beat paper, paper beats rock. First to 5 points wins.|La piedra gana a las tijeras, las tijeras al papel y el papel a la piedra. Gana quien llegue primero a 5 puntos.|石头胜剪刀，剪刀胜布，布胜石头。先得5分者获胜。
+Répondez à 5 questions de culture générale. 1 point par bonne réponse, 3 bonnes réponses minimum pour gagner.|Answer 5 general knowledge questions. 1 point per correct answer, at least 3 correct to win.|Responde 5 preguntas de cultura general. 1 punto por acierto, mínimo 3 aciertos para ganar.|回答5道常识题。每答对一题得1分，至少答对3题才算获胜。
+Touchez le bouton rouge pour démarrer. Quand il devient vert, touchez le plus vite possible. Trop tôt = raté. Votre meilleur temps (ms) est gardé.|Tap the red button to start. When it turns green, tap as fast as you can. Too early = fail. Your best time (ms) is saved.|Toca el botón rojo para empezar. Cuando se ponga verde, toca lo más rápido posible. Demasiado pronto = fallo. Se guarda tu mejor tiempo (ms).|点击红色按钮开始。变绿时尽快点击。太早点击算失败。最佳成绩（毫秒）会被保存。
+Résolvez 5 calculs de tête et saisissez le résultat. 4 bonnes réponses minimum pour gagner.|Solve 5 calculations in your head and enter the result. At least 4 correct to win.|Resuelve 5 cálculos mentalmente e introduce el resultado. Mínimo 4 aciertos para ganar.|心算5道题并输入结果。至少答对4题才算获胜。
+Remettez les lettres dans l’ordre pour retrouver le mot. 5 mots, 4 bons minimum pour gagner.|Put the letters in order to find the word. 5 words, at least 4 correct to win.|Ordena las letras para encontrar la palabra. 5 palabras, mínimo 4 correctas para ganar.|把字母排成正确顺序，找出单词。共5个词，至少答对4个才算获胜。
+Dirigez le serpent avec les flèches. Mangez les pommes rouges pour grandir. Ne touchez ni les bords ni votre queue. 5 pommes minimum pour gagner.|Steer the snake with the arrows. Eat the red apples to grow. Don’t hit the edges or your tail. At least 5 apples to win.|Dirige la serpiente con las flechas. Come manzanas rojas para crecer. No toques los bordes ni tu cola. Mínimo 5 manzanas para ganar.|用方向键控制蛇。吃红苹果长大。不要碰到边缘或自己的尾巴。至少吃5个苹果才算获胜。
+Devinez le mot en touchant les lettres. 7 erreurs maximum.|Guess the word by tapping letters. 7 mistakes maximum.|Adivina la palabra tocando las letras. Máximo 7 errores.|点击字母猜单词。最多错7次。
+Mémorisez la suite de couleurs qui s’allume, puis reproduisez-la. Chaque niveau ajoute une couleur. Niveau 6 pour gagner.|Memorize the sequence of colors that lights up, then repeat it. Each level adds a color. Reach level 6 to win.|Memoriza la secuencia de colores que se ilumina y repítela. Cada nivel añade un color. Nivel 6 para ganar.|记住亮起的颜色顺序并重复。每关增加一种颜色。达到第6关即获胜。
+Touchez la taupe quand elle apparaît. 20 secondes. 10 taupes minimum pour gagner.|Tap the mole when it appears. 20 seconds. At least 10 moles to win.|Toca el topo cuando aparezca. 20 segundos. Mínimo 10 topos para ganar.|地鼠出现时点击它。限时20秒。至少打中10只才算获胜。
+Répondez Vrai ou Faux à 5 affirmations. 4 bonnes réponses minimum pour gagner.|Answer True or False to 5 statements. At least 4 correct to win.|Responde Verdadero o Falso a 5 afirmaciones. Mínimo 4 aciertos para ganar.|判断5个说法的对错。至少答对4题才算获胜。
+Lancez les dés 3 fois contre l’ordinateur. Le total le plus élevé gagne.|Roll the dice 3 times against the computer. The highest total wins.|Lanza los dados 3 veces contra el ordenador. Gana el total más alto.|与电脑比赛掷骰子3次，总点数高者获胜。
+Trouvez la capitale de chaque pays. 5 questions, 4 bonnes réponses minimum pour gagner.|Find the capital of each country. 5 questions, at least 4 correct to win.|Encuentra la capital de cada país. 5 preguntas, mínimo 4 aciertos para ganar.|找出每个国家的首都。共5题，至少答对4题才算获胜。
+Trouvez le nombre qui continue la suite. 5 suites, 4 bonnes réponses minimum pour gagner.|Find the number that continues the sequence. 5 sequences, at least 4 correct to win.|Encuentra el número que continúa la serie. 5 series, mínimo 4 aciertos para ganar.|找出数列的下一个数。共5题，至少答对4题才算获胜。
+Touchez la COULEUR de l’encre du mot, pas ce que le mot dit. 8 mots, 6 bonnes réponses minimum.|Tap the INK COLOR of the word, not what the word says. 8 words, at least 6 correct.|Toca el COLOR de la tinta de la palabra, no lo que dice. 8 palabras, mínimo 6 aciertos.|点击文字的“颜色”，而不是文字的内容。共8个词，至少答对6个。
+Activez la position pour voir les annonces proches. Sinon, filtrez par ville dans l’accueil.|Turn on location to see nearby posts. Otherwise, filter by city on the home screen.|Activa la ubicación para ver anuncios cercanos. Si no, filtra por ciudad en el inicio.|开启定位以查看附近的发布，或在首页按城市筛选。
+🔴 perdu · 🟢 trouvé · 🟠 vous. Touchez un point pour ouvrir l’annonce.|🔴 lost · 🟢 found · 🟠 you. Tap a dot to open the post.|🔴 perdido · 🟢 encontrado · 🟠 tú. Toca un punto para abrir el anuncio.|🔴 丢失 · 🟢 拾到 · 🟠 您。点击圆点打开发布。
+🔒 Remise d’objet : rencontrez-vous dans un lieu public et fréquenté, de jour, et faites décrire un détail non publié de l’objet.|🔒 Handing over an item: meet in a busy public place, in daytime, and ask for an unpublished detail of the item.|🔒 Entrega de objeto: quedad en un lugar público y concurrido, de día, y pide un detalle no publicado del objeto.|🔒 物品交接：请在白天、人多的公共场所见面，并让对方说出未公开的物品细节。
+Météo indisponible (connexion ou ville introuvable). Elle fonctionne dans la version hébergée.|Weather unavailable (connection or city not found). It works in the hosted version.|Tiempo no disponible (conexión o ciudad no encontrada). Funciona en la versión alojada.|天气不可用（网络问题或找不到城市）。在线托管版本可正常使用。
+Tâches enregistrées sur ce téléphone. Les rappels sonnent quand l’application est ouverte. Touchez une tâche pour la modifier.|Tasks are saved on this phone. Reminders ring when the app is open. Tap a task to edit it.|Las tareas se guardan en este teléfono. Los recordatorios suenan con la aplicación abierta. Toca una tarea para editarla.|任务保存在本机。应用打开时才会提醒。点击任务可编辑。
+Rien d’enregistré pour le moment. Les fiches (concerts, locations, réparateurs, livraison, lieux de culte…) sont ajoutées après vérification.|Nothing yet. Listings (concerts, rentals, repairers, delivery, places of worship…) are added after verification.|Aún no hay nada. Las fichas (conciertos, alquileres, reparadores, reparto, lugares de culto…) se añaden tras verificarlas.|暂无内容。信息（音乐会、租赁、维修、配送、礼拜场所等）经核实后添加。
+Débutant → Chercheur (50) → Détective (150) → Expert (400) → Maître Trouvéoh (1000)|Beginner → Seeker (50) → Detective (150) → Expert (400) → Trouvéoh Master (1000)|Principiante → Buscador (50) → Detective (150) → Experto (400) → Maestro Trouvéoh (1000)|新手 → 探寻者（50）→ 侦探（150）→ 专家（400）→ Trouvéoh 大师（1000）
+Rien à afficher pour le moment.|Nothing to show yet.|Nada que mostrar por ahora.|暂时没有内容。
+Publiez avec l’onglet ➕.|Post using the ➕ tab.|Publica con la pestaña ➕.|请使用 ➕ 标签页发布。
+⭐ Sponsorisé|⭐ Sponsored|⭐ Patrocinado|⭐ 赞助
+Se déconnecter|Sign out|Cerrar sesión|退出登录
+GPS désactivé dans l’application|GPS turned off in the app|GPS desactivado en la aplicación|应用内 GPS 已关闭
+GPS activé ✓|GPS turned on ✓|GPS activado ✓|GPS 已开启 ✓
+Annonce publiée ✓|Post published ✓|Anuncio publicado ✓|已发布 ✓
+Publié ✓|Published ✓|Publicado ✓|已发布 ✓
+Modifié ✓|Updated ✓|Modificado ✓|已修改 ✓
+Merci, signalement envoyé|Thanks, report sent|Gracias, denuncia enviada|感谢，举报已提交
+Connectez-vous pour continuer|Sign in to continue|Inicia sesión para continuar|请登录后继续
+Position refusée : saisissez votre ville.|Location denied: enter your city.|Ubicación denegada: escribe tu ciudad.|定位被拒绝：请输入您的城市。
+GPS indisponible : saisissez votre ville.|GPS unavailable: enter your city.|GPS no disponible: escribe tu ciudad.|GPS 不可用：请输入您的城市。
+Titre et ville obligatoires|Title and city are required|Título y ciudad obligatorios|标题和城市为必填项
+Lien copié|Link copied|Enlace copiado|链接已复制
+Demande envoyée ✓|Request sent ✓|Solicitud enviada ✓|申请已发送 ✓
+Indiquez un motif|Please give a reason|Indica un motivo|请填写原因
+Indiquez une raison|Please give a reason|Indica una razón|请填写原因
+Tapez SUPPRIMER pour confirmer|Type DELETE to confirm|Escribe ELIMINAR para confirmar|输入“删除”以确认
+Bravo, vous gagnez ! 🎉|Well done, you win! 🎉|¡Bravo, ganas! 🎉|太棒了，您赢了！🎉
+L’ordinateur gagne.|The computer wins.|Gana el ordenador.|电脑获胜。
+Égalité.|Draw.|Empate.|平局。
+À vous de jouer|Your turn|Te toca|轮到您了
+Attendez le vert…|Wait for green…|Espera el verde…|等待变绿…
+TOUCHEZ !|TAP!|¡TOCA!|点击！
+Démarrer|Start|Empezar|开始
+Trop tôt ! 😅|Too early! 😅|¡Demasiado pronto! 😅|太早了！😅
+🎲 Lancer les dés|🎲 Roll the dice|🎲 Lanzar los dados|🎲 掷骰子
+~ · par | · by | · por | · 作者 
+~🕒 Publié le |🕒 Published on |🕒 Publicado el |🕒 发布于 
+~📅 Date de l’événement : |📅 Event date: |📅 Fecha del evento: |📅 活动日期：
+~ (position approximative)| (approximate location)| (ubicación aproximada)|（大致位置）
+~ · modifié| · edited| · editado| · 已编辑
+~Rayon |Radius |Radio |半径 
+~Mes annonces (|My posts (|Mis anuncios (|我的发布（
+~💬 Commentaires (|💬 Comments (|💬 Comentarios (|💬 评论（
+~ de vous| from you| de ti|，距您
+~Clés · |Keys · |Llaves · |钥匙 · 
+~Portefeuille · |Wallet · |Cartera · |钱包 · 
+~Téléphone · |Phone · |Teléfono · |手机 · 
+~Documents · |Documents · |Documentos · |证件 · 
+~Sac · |Bag · |Bolso · |包 · 
+~Vêtement · |Clothing · |Ropa · |衣物 · 
+~Autre · |Other · |Otro · |其他 · 
+~Concert · |Concert · |Concierto · |音乐会 · 
+~Conférence · |Conference · |Conferencia · |会议 · 
+~Communautaire · |Community · |Comunitario · |社区 · 
+~Sport · |Sports · |Deporte · |体育 · 
+~Santé · |Health · |Salud · |健康 · 
+~Transport · |Transport · |Transporte · |交通 · 
+~Sécurité · |Safety · |Seguridad · |安全 · 
+~Administration · |Administration · |Administración · |行政 · 
+~Marché / prix · |Market / prices · |Mercado / precios · |市场/价格 · 
+~Église / Mosquée · |Church / Mosque · |Iglesia / Mezquita · |教堂/清真寺 · 
+~Perdu : |Lost: |Perdido: |丢失：
+~Trouvé : |Found: |Encontrado: |拾到：
+~Score : |Score: |Puntuación: |得分：
+~Temps : |Time: |Tiempo: |时间：
+~Question |Question |Pregunta |问题 
+~Niveau : |Level: |Nivel: |等级：
+~Erreurs : |Errors: |Errores: |错误：
+~Coups : |Moves: |Movimientos: |步数：
+~Essais : |Tries: |Intentos: |尝试：
+~Record : |Record: |Récord: |纪录：
+~ · Bravo ! 🎉| · Well done! 🎉| · ¡Bravo! 🎉| · 太棒了！🎉
+~ · Perdu !| · Lost!| · ¡Perdiste!| · 输了！
+~ · Terminé !| · Finished!| · ¡Terminado!| · 结束！`;
+var LNG="fr";try{LNG=localStorage.getItem("tvl")||"fr"}catch(e){}
+var DX={},SPT=[],TRX=0;
+DICT.split("\n").forEach(function(l){var sub=l.charAt(0)=="~";if(sub)l=l.slice(1);var p=l.split("|");if(p.length<4)return;if(sub)SPT.push([p[0],[p[1],p[2],p[3]]]);else DX[p[0].trim()]=[p[1].trim(),p[2].trim(),p[3].trim()]});
+SPT.sort(function(a,b){return b[0].length-a[0].length});
+function trT(t,k){var e=DX[t];if(e)return e[k];for(var i=0;i<SPT.length;i++){if(t.indexOf(SPT[i][0])>=0)t=t.split(SPT[i][0]).join(SPT[i][1][k])}return t}
+function trN(r){if(LNG=="fr"||!r)return;var k=LNG=="en"?0:LNG=="es"?1:2,list=[];
+ if(r.nodeType==3)list.push(r);else if(r.nodeType==1){var w=document.createTreeWalker(r,4),n;while(n=w.nextNode())list.push(n);var ph=r.querySelectorAll?r.querySelectorAll("[placeholder]"):[];for(var i=0;i<ph.length;i++){var o=ph[i].getAttribute("placeholder"),v=trT(o,k);if(v!==o)ph[i].setAttribute("placeholder",v)}if(r.getAttribute&&r.getAttribute("placeholder")){var o2=r.getAttribute("placeholder"),v2=trT(o2,k);if(v2!==o2)r.setAttribute("placeholder",v2)}}
+ list.forEach(function(n){var v=n.nodeValue,t=v.replace(/\s+/g," ").trim();if(!t)return;var x=trT(t,k);if(x!==t)n.nodeValue=v.replace(t,x)})}
+try{new MutationObserver(function(ms){if(LNG=="fr"||TRX)return;TRX=1;try{ms.forEach(function(m){for(var i=0;i<m.addedNodes.length;i++)trN(m.addedNodes[i])})}finally{TRX=0}}).observe(document.body,{childList:true,subtree:true})}catch(e){}
+function setLang(l){LNG=l;try{localStorage.setItem("tvl",l)}catch(e){}document.documentElement.lang=l;draw()}
+function langSel(){return '<div class="card" style="margin-top:10px"><label>🌐 Langue</label><select onchange="setLang(this.value)" style="margin-bottom:0">'+[["fr","Français"],["en","English"],["es","Español"],["zh","中文"]].map(function(x){return '<option value="'+x[0]+'"'+(LNG==x[0]?" selected":"")+'>'+x[1]+'</option>'}).join("")+'</select></div>'}
+function fd(t){if(!t)return"—";var d=new Date(t),L={fr:"fr-FR",en:"en-GB",es:"es-ES",zh:"zh-CN"}[LNG]||"fr-FR",c={fr:" à ",en:" at ",es:" a las ",zh:" "}[LNG]||" à ";return d.toLocaleDateString(L,{day:"numeric",month:"short",year:"numeric"})+c+d.toLocaleTimeString(L,{hour:"2-digit",minute:"2-digit"})}
+function gpsOff(){try{return !!localStorage.getItem("tvgo")}catch(e){return false}}
+function gpsIn(sm){return pos?'<button class="btn sec sm" style="margin-bottom:8px" onclick="gpsT()">✅ GPS déjà activé · Désactiver</button>':'<button class="btn'+(sm?' sec sm':'')+'" style="margin-bottom:8px" onclick="gpsT()">📡 Activer ma position</button>'}
+function gpsBtn(sm){return '<div id="gpsw">'+gpsIn(sm)+'</div>'}
+function gpsU(){var g=$("gpsw");if(g)g.innerHTML=gpsIn(1);var b=$("gpsb");if(b)b.textContent=pos?"📡 GPS activé":"📡 GPS désactivé";if(tab==2)draw()}
+function gpsDone(){gpsU()}
+function gpsT(){if(pos){pos=null;try{localStorage.setItem("tvgo","1")}catch(e){}toast("GPS désactivé dans l’application");gpsU()}else{try{localStorage.removeItem("tvgo")}catch(e){}locate(function(){toast("GPS activé ✓");gpsU()})}}
+function gpsInit(){if(gpsOff())return;try{if(navigator.permissions&&navigator.permissions.query){navigator.permissions.query({name:"geolocation"}).then(function(r){if(r.state=="granted")locate(function(){ref()});r.onchange=function(){if(gpsOff())return;if(r.state=="granted")locate(function(){ref()});else{pos=null;draw()}}}).catch(function(){})}}catch(e){}}
+function mapSearch(){var q=(($("mq")||{}).value||"").trim(),out=$("psr");if(!q){toast("Saisissez un lieu à rechercher");return}
+ var go=function(){out.innerHTML='<p class="mut">Recherche…</p>';
+  var u="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=15&q="+encodeURIComponent(q)+(pos?"&viewbox="+(pos.lng-.5)+","+(pos.lat+.5)+","+(pos.lng+.5)+","+(pos.lat-.5):"");
+  fetch(u).then(function(r){return r.json()}).then(function(j){var l=j.map(function(p){return{n:p.display_name,la:+p.lat,lo:+p.lon,d:pos?dist(pos.lat,pos.lng,+p.lat,+p.lon):null}}).sort(function(a,b){return pos?a.d-b.d:0}).slice(0,10);
+   out.innerHTML=l.length?(pos?'':'<p class="mut" style="margin-bottom:6px">GPS désactivé : pas de distances.</p>')+l.map(function(p){var pt=p.n.split(",");return '<div class="card"><b>'+esc(pt[0])+'</b><p class="mut">'+esc(pt.slice(1,4).join(","))+'</p>'+(p.d!=null?'<p><b>📍 '+(p.d<1?Math.round(p.d*1000)+" m":p.d.toFixed(1)+" km")+'</b> de vous</p>':"")+'<a href="https://www.google.com/maps/dir/?api=1'+(pos?'&origin='+pos.lat+','+pos.lng:'')+'&destination='+p.la+','+p.lo+'" target="_blank" rel="noopener"><button class="btn sec sm">🧭 Itinéraire</button></a></div>'}).join(""):'<div class="card mut">Aucun résultat.</div>'}).catch(function(){out.innerHTML='<div class="card mut">Recherche intégrée indisponible ici. <a href="https://www.google.com/maps/search/'+encodeURIComponent(q)+'" target="_blank" rel="noopener" style="color:var(--pri)">Ouvrir dans Google Maps</a></div>'})};
+ if(pos||gpsOff())go();else{var done=0,f=function(){if(!done){done=1;go()}};locate(function(){gpsU();f()});setTimeout(f,8000)}}
+function askWhy(title,cb){var s=document.createElement("div");s.className="sheet";s.id="wsh";s.innerHTML='<div><h3>'+title+'</h3><label>Motif (obligatoire)</label><select id="wr"><option value="">Choisir une raison…</option><option>Erreur de ma part</option><option>Information incorrecte</option><option>Objet retrouvé / restitué</option><option>Contenu inapproprié</option><option>Autre</option></select><button class="btn red" id="wgo">Confirmer la suppression</button><button class="btn sec" onclick="$(\'wsh\').remove()">Annuler</button></div>';document.body.appendChild(s);$("wgo").onclick=function(){var r=$("wr").value;if(!r){toast("Indiquez un motif");return}s.remove();cb(r)}}
+function cdel(id){var s=$("csh");if(s)s.remove();var c=S.cm.filter(function(x){return x.id==id})[0];if(!c||Date.now()-c.ts>1728e5){toast("Délai de 48 h dépassé");return}askWhy("Supprimer ce commentaire ?",function(r){db.collection("deletions").add({type:"comment",reason:r,ts:Date.now()}).catch(function(){});db.doc("comments/"+id).delete().catch(function(){toast("Suppression impossible")})})}
+function delItem(c,id){askWhy("Supprimer cette publication ?",function(r){db.collection("deletions").add({type:c,reason:r,ts:Date.now()}).catch(function(){});db.doc(c+"/"+id).delete().catch(function(){toast("Suppression impossible")});cur=null;draw()})}
+var usq="";
+function usrSearch(){var q=usq.trim().toLowerCase(),r="";
+ if(q.length>=2){var l=Object.keys(S.dir).filter(function(k){return k!=uid&&S.pr.blocked.indexOf(k)<0&&nm(k).toLowerCase().indexOf(q)>=0}).slice(0,8);
+  r=l.length?l.map(function(k){var d=S.dir[k];return '<div class="card row" style="cursor:pointer;padding:10px 14px" onclick="usq=\'\';openPM(\''+k+'\')"><div class="av" style="width:42px;height:42px;font-size:18px;margin:0;flex:none">'+(d.photo?'<img src="'+d.photo+'">':"👤")+'</div><div style="flex:1"><b>'+esc(nm(k))+'</b><div class="mut">'+esc(d.ville||"")+'</div></div><button class="btn sm">✉️ Écrire</button></div>'}).join(""):'<div class="card mut">Aucun utilisateur trouvé.</div>'}
+ return '<input id="usq" placeholder="👤 Rechercher un utilisateur par nom…" value="'+esc(usq)+'" oninput="usq=this.value;clearTimeout(window.tus);window.tus=setTimeout(ref,250)" style="margin-bottom:8px">'+r}
+var dlast=[0,0],dr,ds;
+function newDe(){dr=0;ds=[0,0];dlast=[0,0]}
+function dro(){if(dr>=3)return;var a=1+Math.floor(Math.random()*6),b=1+Math.floor(Math.random()*6);ds[0]+=a;ds[1]+=b;dlast=[a,b];dr++;if(dr==3&&ds[0]>ds[1]){best("de",ds[0]);reward()}draw()}
+function deV(){var E=["","⚀","⚁","⚂","⚃","⚄","⚅"];return '<p style="text-align:center;font-weight:700">Manche '+Math.min(dr+1,3)+' / 3</p><p style="text-align:center;font-size:56px;margin:8px 0">'+E[dlast[0]]+' '+E[dlast[1]]+'</p><p style="text-align:center">Vous : <b>'+ds[0]+'</b> · Ordinateur : <b>'+ds[1]+'</b>'+(dr>=3?(ds[0]>ds[1]?" · Bravo ! 🎉":ds[0]==ds[1]?" · Égalité":" · Perdu !"):"")+'</p><button class="btn" style="margin-top:14px" onclick="'+(dr>=3?"newDe();draw()":"dro()")+'">'+(dr>=3?"Rejouer":"🎲 Lancer les dés")+'</button>'}
+var CP=[["Côte d’Ivoire",["Abidjan","Yamoussoukro","Bouaké"],1],["France",["Lyon","Paris","Nice"],1],["Sénégal",["Dakar","Thiès","Saint-Louis"],0],["Ghana",["Kumasi","Accra","Tamale"],1],["Maroc",["Rabat","Casablanca","Fès"],0],["Nigeria",["Lagos","Abuja","Kano"],1],["Égypte",["Alexandrie","Le Caire","Gizeh"],1],["Japon",["Osaka","Kyoto","Tokyo"],2]],cpi,cps,cpq;
+function newCp(){cpi=0;cps=0;cpq=CP.slice().sort(function(){return Math.random()-.5}).slice(0,5)}
+function cpa(i){if(cpi>=5)return;if(cpq[cpi][2]==i)cps++;cpi++;if(cpi==5){best("cp",cps);if(cps>=4)reward()}draw()}
+function cpV(){if(cpi>=5)return '<div class="card" style="text-align:center"><h2>Score : '+cps+' / 5</h2><button class="btn" style="margin-top:12px" onclick="newCp();draw()">Rejouer</button></div>';var q=cpq[cpi];return '<div class="card"><p class="mut">Question '+(cpi+1)+' / 5</p><h3 style="margin:6px 0 12px">Capitale : '+q[0]+' ?</h3>'+q[1].map(function(a,i){return '<button class="btn sec" style="margin-bottom:8px" onclick="cpa('+i+')">'+a+'</button>'}).join("")+'</div>'}
+var sli,sls,slq;
+function newSl(){sli=0;sls=0;slq=[];for(var i=0;i<5;i++){var a=1+Math.floor(Math.random()*9),d=2+Math.floor(Math.random()*7);slq.push(i%2?[[a,a+d,a+2*d,a+3*d,"?"].join(", "),a+4*d]:[[a,a*2,a*4,a*8,"?"].join(", "),a*16])}}
+function sla(){var v=parseInt($("sa").value);if(isNaN(v))return;if(v==slq[sli][1])sls++;sli++;if(sli==5){best("sl",sls);if(sls>=4)reward()}draw()}
+function slV(){if(sli>=5)return '<div class="card" style="text-align:center"><h2>Score : '+sls+' / 5</h2><button class="btn" style="margin-top:12px" onclick="newSl();draw()">Rejouer</button></div>';return '<div class="card"><p class="mut">Question '+(sli+1)+' / 5</p><h2 style="margin:8px 0">'+slq[sli][0]+'</h2><input id="sa" type="number" inputmode="numeric" placeholder="?"><button class="btn" onclick="sla()">Valider</button></div>'}
+var CO=[["ROUGE","#ef4444"],["BLEU","#3b82f6"],["VERT","#22c55e"],["JAUNE","#eab308"]],coi,cos,coq;
+function newCo(){coi=0;cos=0;coq=[];for(var i=0;i<8;i++)coq.push([Math.floor(Math.random()*4),Math.floor(Math.random()*4)])}
+function coa(i){if(coi>=8)return;if(i==coq[coi][1])cos++;coi++;if(coi==8){best("co",cos);if(cos>=6)reward()}draw()}
+function coV(){if(coi>=8)return '<div class="card" style="text-align:center"><h2>Score : '+cos+' / 8</h2><button class="btn" style="margin-top:12px" onclick="newCo();draw()">Rejouer</button></div>';return '<p class="mut" style="text-align:center">Question '+(coi+1)+' / 8</p><h1 style="text-align:center;margin:14px 0;color:'+CO[coq[coi][1]][1]+'">'+CO[coq[coi][0]][0]+'</h1><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+CO.map(function(c,i){return '<button style="height:70px;border:0;border-radius:16px;background:'+c[1]+';cursor:pointer" onclick="coa('+i+')"></button>'}).join("")+'</div>'}
+GL.push(["de","🎲","Dés","Lancez les dés 3 fois contre l’ordinateur. Le total le plus élevé gagne.",newDe,deV],
+["cp","🏙️","Capitales","Trouvez la capitale de chaque pays. 5 questions, 4 bonnes réponses minimum pour gagner.",newCp,cpV],
+["sl","🔢","Suite logique","Trouvez le nombre qui continue la suite. 5 suites, 4 bonnes réponses minimum pour gagner.",newSl,slV],
+["co","🎨","Couleurs","Touchez la COULEUR de l’encre du mot, pas ce que le mot dit. 8 mots, 6 bonnes réponses minimum.",newCo,coV]);
 function rows(s){return s.docs.map(function(d){var x=d.data();x.id=d.id;return x})}
 function pubSub(){var er=function(){fail=1;draw()};
  db.collection("directory").onSnapshot(function(s){var o=uid&&S.dir[uid];S.dir={};rows(s).forEach(function(x){S.dir[x.id]=x});if(o&&!S.dir[uid])S.dir[uid]=o;S.r1=1;ref()},er);
